@@ -1,0 +1,5 @@
+Characteristics difference between I/O-bound and process-bound
+	-> CPU bound process, if the very process consumes full time slice
+
+Measure context switch:
+https://www.geeksforgeeks.org/measure-time-spent-context-switch/

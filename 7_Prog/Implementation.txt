@@ -1,0 +1,242 @@
+scheduler_tick()                                                core.c
+        task_tick_smart()                                       smart.c
+                entity_tick()
+                        update_curr()
+                                update_aistats()
+                                update_rewards()
+                                update_state()
+                                update_min_exec_runtime()
+
+Originally, update the vruntime of curr and the min_vruntime of rb-tree
+Modified, update the state of the task and the runqueue
+
+-------
+
+resched_curr()  -> set TIF_NEED_RESCHED
+
+schedule()                                                      core.c
+        __schedule()
+                pick_next_task()
+                        pick_next_task_smart()                  smart.c
+                                update_curr()
+                                pick_next_entity()
+                                        update_weights()
+                                        update_next()
+                		put_prev_entity()
+                                        update_curr()           -> is it necessary ???
+                                        _enqueue_entity()
+                		set_next_entity()
+                                        _dequeue_entity()
+
+Originally, select the next entity to run, push the previous one on the queue and pop
+            the next one from the queue
+Modified, the same
+
+-------
+
+down()                                                          semaphore.c
+        __down()
+                __down_common()
+                        __set_current_state(TASK_UNINTERRUPTIBLE)
+                        list_add_tail(wait_list)
+                        schedule_timeout()                      timer.c
+                                schedule()                      core.c
+
+Modified, None
+
+-------
+
+up()                                                            semaphore.c
+        __up()
+                list_first_entry(wait_list)
+                list_del()
+                wake_up_process()                               core.c
+
+Modified, None
+
+-------
+
+wake_up_process()                                               core.c
+        try_to_wake_up()
+                ttwu_remote() if p->on_rq
+                        ttwu_do_wakeup()
+                                p->state = TASK_RUNNING
+
+                ttwu_queue()
+                        ttwu_do_activate()
+                                ttwu_activate()
+                                        activate_task()
+                                ttwu_do_wakeup()
+                                        p->state = TASK_RUNNING
+
+Modified, None
+
+-------
+
+activate_task()                                                 core.c
+        enqueue_task()
+                enqueue_task_smart()                            smart.c
+                        enqueue_entity()                        -> initialise vruntime of the process
+                                update_curr()                   -> is it necessary ???
+                                __enqueue_entity()
+                                se->on_rq = 1
+
+Modified, None
+
+-------
+
+deactivate_task()                                               core.c
+        dequeue_task()
+                dequeue_task_smart()                            smart.c
+                        dequeue_entity()
+                                update_curr()                   -> is it necessary ???
+                                __dequeue_entity()
+                                se->on_rq = 0
+                        set_next_buddy()
+
+QUESTION: What call deactivate_task() ?
+
+When migrating process:
+detach_task()
+        deactivate_task()
+
+When scheduling, if !preempt && task not running (TASK_RUNNING = 0) and
+                    !signal_pending_state(prev->state, prev)
+__schedule()
+        deactivate_task()
+
+signal_pending_state(prev->state, prev)
+        return 0 if state not (TASK_INTERRUPTIBLE | TASK_WAKEKILL)
+        return 0 if TASK_INTERRUPTIBLE and signal not yet received
+
+Modified, None
+
+-------
+
+udelay()        -> busy_wait_loop
+
+usleep_range()                                          timer.c
+        __set_current_state(TASK_UNINTERRUPTIBLE)
+        schedule_hrtimeout_range()                      hrtimer.c
+                ...
+                        enqueue_hrtimer()
+                                timerqueue_add()        timerqueue.c
+                schedule()
+
+
+        remove_hrtimer                                  hrtimer.c
+                timerqueue_del                          timerqueue.c
+
+msleep()                                                timer.c
+        schedule_timeout_uninterruptible()
+                __set_current_state(TASK_UNINTERRUPTIBLE)
+        	schedule_timeout(timeout)
+
+msleep_interruptible()                                  timer.c
+        schedule_timeout_interruptible()
+                __set_current_state(TASK_INTERRUPTIBLE)
+                schedule_timeout(timeout)
+
+schedule_timeout() -> callback function process_timeout
+         process_timeout()                              timer.c
+                wake_up_process()                       core.c
+
+Modified, None
+
+-------
+
+kernel_thread()                                         fork.c
+        do_fork()
+
+do_fork()                                               fork.c
+        _do_fork()
+                copy_process()
+                                dup_task_struct()       -> create the task
+                                sched_fork()            core.c
+                wake_up_new_task()                      core.c
+                        activate_task()                 core.c
+
+sched_fork()                                            core.c -> set rq of se
+        __sched_fork()                                  -> set sched_entity
+        __set_task_cpu()
+                set_task_rq()
+        task_fork_smart()                       smart.c
+
+Modified, None
+
+-------
+
+do_exit()                                               exit.c
+        set_current_state(TASK_UNINTERRUPTIBLE)
+        schedule()
+                __schedule()
+                        deactivate_task()
+
+do_group_exit()
+        do_exit()
+
+Modified, None
+
+-------
+
+sched_init()                                            core.c
+        for_each_possible_cpu() ->
+                init_cfs_rq()                           smart.c
+
+Modified, None
+
+-------
+
+yield()                                                 core.c
+        do_sched_yield()
+                yield_task_fair()                       smart.c
+                        update_curr()
+                        set_skip_buddy()
+                schedule()                              core.c
+
+yield_to()                                              core.c
+        yield_to_task_fair()                            smart.c
+                yield_task_fair()
+
+Modified, None
+
+-------
+
+put_prev_task_fair()                                    smart.c
+        put_prev_entity()
+
+set_curr_task_fair()                                    smart.c
+        set_next_entity()
+
+Modified, None
+
+-------
+
+TODO:   1. Initialize AI in runqueue                    -> init_cfs_rq()                OK
+        2. Initialize sched_entity in new process       -> task_fork_smart()            OK
+        3. Update environement when deleting a task     -> dequeue()    remove_aistats(se);
+        4. Set attributes with macro:
+                sem_count       -> down(), up()
+                scheduled_count -> pick_next_task_smart()
+                runtime_sum     -> update_curr()
+                block_count     -> down(), spin_lock(), ...
+                sleep_count     -> msleep(), usleep(), msleep_interruptible()
+        5. Update the environment                       -> update_curr()
+                - creating
+                - deleting
+                - sleeping
+                - blocking
+                - scheduling
+                - wake-up
+        6. Calculate the utility of the next task       -> pick_next_task_smart() -> skip
+        7. Calcule and fixed point unit and overflow
+           if overflow, runtime - start...
+        8. Set kconfig:
+                CONFIG_SCHED_SFS
+                CONFIG_SCHED_SFS_ALPHA
+                CONFIG_SCHED_SFS_GAMMA
+                CONFIG_SCHED_SFS_W_AGV_LOAD
+                CONFIG_SCHED_SFS_W_AGV_BLOCK
+                CONFIG_SCHED_SFS_W_AGV_SLEEP
+                CONFIG_SCHED_SFS_W_AGV_SEM
+        9. Remove everythings with vruntime

@@ -1,0 +1,38 @@
+A greedy algorithm:
+an algorithmic paradigm that follows the problem solving  heuristic of making
+the locally optimal choice at each stage[1] with the intent of finding a global
+optimum.
+
+Continuous action space:
+When you're driving of your car and you turn the wheel, is that a discrete or a
+continuous action? It's continuous, because you can control how much you turn
+the wheel. How much do you press the gas pedal? That's a continuous input. This
+leads to a continuous action space: e.g., for each positive real number x in
+some range, "turn the wheel x degrees to the right" is a possible action.
+
+With a discrete action space, the agent decides which distinct action to perform
+from a finite action set. With a continuous action space, actions are expressed
+as a single real-valued vector
+
+continuous state spaces:
+states defined by means of continuous variables such as position, velocity,
+torque, etc
+
+Difference between value iteration and policy iteration:
+
+-> policy iteration
+V(s) = Sum over s' of {P(s', s, pi) * [r(s, pi, s') + gamma * V(s')]}
+pi(s) = argmax over a {P(s', s, a * [r(s, a, s') + gamma * V(s')]}
+
+-> value iteration:
+V(s) = max regarding a of sum over s' of {P(s', s, a * [r(s, a, s') + gamma * V(s')]}
+
+Difference between dynamic programming and temporal difference:
+
+-> Dynamic programming use recursion, need MDP
+-> Temporal difference is model-free
+
+Difference between value function approximation and policy gradient:
+
+value function ->  utility of a state
+policy gradient -> probability of an action

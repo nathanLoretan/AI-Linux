@@ -1,0 +1,125 @@
+Current Linux Page replacement:
+------------------------------
+LRU -> Least recent used
+
+Other algorithm:
+---------------
+random selection
+FIFO
+second chance
+LRUe
+LRU 2Q
+ARC
+
+Automatic Adaptive Page-size Control for Remote Memory Paging
+-------------------------------------------------------------
+Developed for sever and remote memory paging
+difficult to determine the optimal page size before program running
+estimates a working data set size and changes page size dynamically
+prevent trashing by choosing an appropriate page size
+
+if no trashing -> larger page size preferable -> change page size little larger
+if trashing -> change page size small
+
+NOTE: Doesn't used machine learning
+
+
+Machine learning feature selection for tuning memory page swapping
+------------------------------------------------------------------
+predict pages that will not be recalled
+predict when the system has made bad page-out decisions
+page replacement algorithm (PRA)
+working set = set of all pages required by a program to operate correctly in a
+given time slice
+machine learning based virtual memory (MLVM)
+
+NOTE: Some test tools explained
+
+Use for classification:
+Time since last page fault (MLVM)
+Previous faulting process is the current faulting process (MLVM)
+Number of dirty pages belonging to the faulting process
+Time since the faulting process last faulted (MLVM)
+Time since faulting page’s active bit was cleared (MLVM)
+Time since faulting page last faulted (MLVM)
+Faulting page’s reference counter
+Distance of the index of the page that faulted prior to the faulting page’s
+    previous fault
+    from the current faulting page (MLVM)
+Distance of the index of the page that faulted prior to this page from this
+    page (MLVM)
+
+try to classify the data as either being recalled from the backing
+store at some point in the future, or not being recalled at all
+
+Outperforming LRU with an Adaptive Replacement Cache Algorithm (ARC)
+--------------------------------------------------------------
+Commonly used criterion for evaluating a replacement policy is its hit ratio
+ARC maintains two LRU pages lists:  L1 -> pages that have been seen only once
+                                    L2 -> seen at least twice
+L1 capture recency
+L2 capture frequency
+
+if L1 = C removes LRU member of L1
+if L1 < C removes LRU member of L2
+
+T1 contains the top or most-recent pages in L1
+B1 contains the bottom or least-recent pages in L1
+
+if T1 > p removes LRU member of T1
+if T1 < p removes LRU member of T2
+
+T1 and T2 are the page cache TLB of size c. T1 + T2 = c
+
+p adaptive such T1 = p and T2 = c-p
+
+. . . [   B1  <-[     T1    <-!->      T2   ]->  B2   ] . .
+      [ . . . . [ . . . . . . ! . .^. . . . ] . . . . ]
+                [   fixed cache size (c)    ]
+
+NOTE: Learn time between in RAM and in secondary memory
+
+Better caching using reinforcement learning
+-------------------------------------------
+http://wiki.ubc.ca/Better_caching_using_reinforcement_learning
+
+Keep LRU but should be in inactive list or active.
+
+Attribute:
+-> how many times was the page moved from the inactive list to the active list
+-> how many times was the page accessed after eviction on an average.
+-> how many times was the page accessed before being evicted.
+
+penalty:
+-> should the page move to the inactive list?
+-> should the page be evicted?
+
+Rewards: -> consider only the page swapped
+- time in swap cache before access
+- time in page cache
+
+-> When a page is added to the cache
+        - If this is the first time the page is added to the cache, then no
+          shadow entry is found.
+            -> reward = weighted average of the pages in the cache
+
+        - If this page was a previously evicted page then there was a shadow
+          entry found.
+            -> reward = shadow entry reward.
+
+        - We also establish that this page was wrongly evicted in favor of the
+          pages in the cache.
+            -> we reduce the reward (i.e increase the penalty) of the rest of the
+               pages in the cache.
+
+        This is with the hope that the rest of the pages will be removed before
+        this page.
+
+-> When a page is removed from the Inactive list,
+    -> we store the rewards in a shadow entry for that page in the radix tree.
+
+-> When a page is accessed again
+    -> we get a hit and so we increase the reward (i.e decrease the penalty).
+
+    This is with the hope that the page that has a lot of hits is removed the
+    later than pages that have lesser hits.

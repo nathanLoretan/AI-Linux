@@ -1,0 +1,169 @@
+either:
+	- Vruntime = utility to improve			-> value-based
+	- red-black tree = policy to improve	-> policy-based
+--------------------------------------------------------------------------------
+
+C4.5 or K-NN -> For defining process type (I/O or process bound)
+Semantical Cognitive Scheduling -> For task scheduling order
+Estimation of CPU Bust and timeslice -> For priority adaptation
+Load Balance -> For task mapping
+SmartLocks / reactive lock -> For synchronization and improve task scheduling
+
+--------------------------------------------------------------------------------
+Some scheduler use the different type of process to determine an adaptive
+time slice to scheduler. Usually, they classify the process, ML used, and
+define the time slice required for the process.
+
+The systematic cognitive scheduler use utility function u(s, p) to determine
+the order to which the process should be scheduled. Search the sequence that
+maximize the utility.
+    -> Use search algorithm.
+    -> Doesn't explain how to learn the utility
+
+For multicore, the problem of high priority task with bad co-runner is important.
+Therefore, use RL. Maintain states per core that depends on average normalized
+instruction per cycle (IPC), average cache affinity, average cache miss rate.
+Actions consist of migration. The scheduler should the task affinity which each
+possible processor.
+
+====
+
+The locality is bound with the fact that cache miss is a negative rewards.
+
+for classification: s = static, d = dynamic
+
+classification attribute:
+    s Linux ZONE_DMA, ZONE_NORMAL, ZONE_HIGHMEM
+    s space used by process shared libraries
+    s size of memory required
+    d virtual memory currently used
+
+    d page reclaims
+    d page fault
+
+    d wait time
+    d run time
+
+Class:
+    d I/O bound         \_ learned regarding run time
+    d CPU bound         /
+    s kernel thread     \_ determine regarding who create the kernel
+    s user thread       /
+    d independent process   \_ learned if lock by another one
+    d cooperative process   /
+
+Possible state of process: (use unsigned long where each bit is a state)
+    - which core
+    - Linux RUNNING / INTERRUPTIBLE / UNINTERRUPTIBLE -> Used for synchronization
+    - state depending on running factors
+
+Reward:
+    - finished without preemption
+
+    Use to determine which process to run next
+    ------------------------------------------
+    - page reclaims
+    - page fault
+
+    - wait time
+    - run time / run time before context switch
+
+    - Involuntary context switch (lock or preemption)
+    - Voluntary context switch
+
+    Use to determine if changing core
+    ---------------------------------
+    - cache miss    NOTE: Difficult
+    - cache affinity -> executed in the core
+    - IPC -> run time
+
+Prior Utility:
+    - priority
+    - parent utility
+
+Action:
+    - migration from core to core
+    - next process selection
+
+May be useful:
+    - Estimated time to completion
+    - memory address
+    - memory region
+
+How to know when to move a process on another core ?
+Which class of process should be used ?
+What is the transition state ?
+Page locality for numa ?
+
+--------------------------------------------------------------------------------
+The locality of a critical section can be exploited by using tasks than require
+the same lock to be moved to the same processor. But it will increase the
+number of lock and wait time average.
+
+Some paper use the idea of spin threshold where the lock spins before blocking if
+the time is too long. Need to know if it is held by a process in the same
+core.
+
+How long does it takes between before a thread call the lock ?
+How long the log is taken ?
+Is the thread in the same core ?
+
+===
+
+However, Linux use specific synchronization principle to determine if the
+process should spin-lock or block. Therefore, it would not be relevant to
+modify those synchronization tool. It would be better to develop a new one
+such smartlocks. Modifying the Linux synchronization tool would modify their
+purposes which is not a good idea. But Scheduler will already try to avoid as
+much as possible lock between processes.
+
+Linux select the process of the queue to wake-up and then push it in the
+ready queue.
+
+--------------------------------------------------------------------------------
+Some page algorithm replacement(PRA) try to predict if a page will be recalled
+or not recalled. Classification between pages is used to determine this.
+
+Some PRA try to determine the page working set. if not trashing they increase
+it and if trashing, they reduce it.
+
+No one determine the best location of the page regarding the architecture of
+the memory (NUMA).
+
+===
+
+Linux use LRU to know which page to swap out. It used two lists, active and
+inactive, and the pages from the inactive list are selected to be freed.
+
+The pages are moved between active and inactive list by the function
+refill_inactive_zone()
+
+The NUMA node is considered with alloc_page() which is called when swap in.
+It would not be interesting to spend time to improve the memory emplacement
+for specific NUMA architecture.
+
+Attributes:
+    - avg. time page in disk
+    - avg. time page in RAM
+    - recency
+    - frequency
+    - TLB cache miss -> NOTE: difficult
+
+State:
+    - dirty
+    - Linux PG_Active (active list, inactive list)
+    - Linux PG_referenced
+
+Rewards:
+    - reload  page
+    - access page
+
+
+    - hit and page in disk or RAM
+    - nbr time accessed
+    - average between each access
+    - recency
+    - frequency of accessed
+
+    - if page swapped out stays long time in disk ++
+    - if page swapped in stays a short time in RAM --

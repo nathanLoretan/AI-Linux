@@ -1,0 +1,262 @@
+https://elixir.bootlin.com/linux/v3.10.2/ident/default_wake_function
+
+https://oska874.gitbooks.io/process-scheduling-in-linux/content/chapter10.html
+
+Professional Linux Kernel Architecture
+Linux kernel development
+understanding the linux kernel
+
+Scheduler:
+----------
+https://oska874.gitbooks.io/process-scheduling-in-linux/content/chapter8.html
+
+scheduler_tick() -> determine if the current task has to be scheduled set
+                    TIF_NEED_RESCHED if needed
+schedule() -> allocate the CPU to a process other than the currently active one
+schedule invoke when TIF_NEED_RESCHED flag
+
+scheduler_tick()
+    task_tick()
+        task_tick_fair()
+            entity_tick()
+                update_curr()
+
+CFS:
+    at new process, take parent vruntime
+
+    https://notes.shichao.io/lkd/ch4/#the-linux-scheduling-algorithm
+
+    determine vruntime regarding number of processes to schedule and the
+    priority of the process.
+
+    vruntime = amount of time it has spent on the processor
+    task with the lower runtime is the task that most deserves to run
+
+    used to account for how long a process has run and it ought to run
+
+    update_curr(), invoked periodically by system timer, entity_tick(),
+                   and update vruntime
+
+        delta_exec = (unsigned long)(now - curr->exec_start);
+        __update_curr(cfs_rq, curr, delta_exec);
+        curr->exec_start = now;
+
+    __update_curr()
+
+        delta_exec_weighted = delta_exec * (NICE_0_LOAD / curr->load.weight)
+        curr->vruntime += delta_exec_weighted;
+
+    curr->load, depends on process type and its static priority, calculated
+                in function set_load_weight()
+
+        sturct load_weight {
+            unsigned lon wieght, inv_weight
+        }
+
+    Selection:
+    ==========
+    CFS use red-black tree to manage the list of runnable processes and
+    find the smallest
+
+    pick_next_entity() = pick_next_task()
+
+    Add new process:
+    ================
+    CFS adds processes to the rbtree when a process becomes runnable/wake up
+    or created via forked
+
+    enqueue_entity() = enqueue_task()
+
+    1. The left most node of the scheduling tree is chosen (as it will have the
+       lowest spent execution time), and sent for execution.
+
+    2. If the process simply completes execution, it is removed from the system
+       and scheduling tree.
+
+    3. If the process reaches its maximum execution time or is otherwise stopped
+       (voluntarily or via interrupt) it is reinserted into the scheduling tree
+       based on its new spent execution time.
+
+    4. The new left-most node will then be selected from the tree, repeating
+       the iteration.
+
+O(1):
+    one Runqueue for each CPU:
+        active array
+        expired array
+
+    when a process's quantum expires, it is placed into the expired array
+    periodically change the role of active and expired array
+
+BFS:
+    use effective virtual deadline first policy
+    when task requests CPU time, it is given a timeslice and a virtual deadline
+    task with higher priority will given a virtual deadline
+    when task block, it keep the reminder of its task block
+    maintain single queue for all CPU
+
+When process insert or stop after maximum execution time, it is re-inserted in
+the queue or the red-black tree
+
+Load balance
+------------
+https://oska874.gitbooks.io/process-scheduling-in-linux/content/chapter10.html
+https://stackoverflow.com/questions/34442691/linux-kernel-task-h-load
+
+workload balancing is always done between groups of a scheduling domain
+a process is moved from one CPU to another only if the total workload of some
+group in some scheduling domain is significantly lower than the workload of
+another group in the same scheduling domain.
+
+scheduling domain (sched_domain) -> group (sched_group) -> CPU
+
+rebalance_tick():   - called by timer
+                    - update runqueue average workload
+                    - use cpu_load -> CPU load based on avg of processes in
+                                      the runqueue
+                    - nr_running -> number of runnable processes in the runqueue
+                    - determine if load_balance() called is needed
+
+load_balance():     - use move tasks to try to move some processes from the
+                      busiest run queue to the local runqueue
+
+Wait/Wake up
+-------------
+https://www.safaribooksonline.com/library/view/linux-device-drivers/0596000081/ch05s02.html
+
+After inserting the process in wait queue -> call schedule()
+When waking up a process -> call enqueue_task()
+
+exclusive processes -> selectively woken up by the kernel
+non exclusive processes -> always woken up by the kernel when the event occurs
+
+wait_queue_head_t: represents the queue as a whole. It is the head of the waiting
+                   queue.
+wait_queue_t: represents the item of the list - a single process waiting in the
+              queue.
+
+add_wait_queue() insert a nonexclusive process in the first position of a wait
+queue list.
+
+add_wait_queue_exclusive() insert a exclusive process in the first position of
+a wait queue list.
+
+wake_up() function is called with
+
+Adding the TASK_EXCLUSIVE flag to the task state indicates that the process is
+in an exclusive wait. The call to add_wait_queue_exclusive is also necessary,
+however. That function adds the process to the end of the wait queue, behind
+all others. The purpose is to leave any processes in nonexclusive sleeps at the
+beginning, where they will always be awakened. As soon as wake_up hits the first
+exclusive sleeper, it knows it can stop.
+
+With semaphore the function add_wait_queue_exclusive_locked() but modified
+__add_wait_queue_tail_exclusive() with the new Linux kernel version
+
+Wake up the exclusive task in a FIFO way.
+
+Paging/Swapping
+---------------
+http://140.120.7.21/LinuxRef/mmLinux/VmOutline/pagecache.html
+Page remplacement algorithm used is LRU with two lists:
+    active_list -> wokring set of all processes
+    inactive_list -> reclaim canditates
+
+the function alloc_pages() calls numa_node_id() to return the logical ID of the
+node associated with the current running CPU. Page allocation already consider
+where should be place the page regarding NUMA and memory.
+
+do_page_fault( ) -> Page Fault interrupt service routine
+if the page is not in the ram, call handle_mm_fault() to allocate a new page
+frame.
+
+an addressed page may not be present in main memory either because the page was
+never accessed by the process, or because the corresponding page frame has been
+reclaimed by the kernel
+
+either:
+    no page -> do_no_page() -> alloc a new page
+    page belong to non-linear disk file mapping
+    page saved on disk
+
+address_space structure to identify pages in the page cache
+
+pdflush thread write back when:
+    - free memory shrinks below a specified threshold
+    - dirty data grows older than a specific threshold -> avoid system failure
+      because memory is volatile
+pdflush is used when too many pages are dirty
+
+PFRA = page frame reclaiming algorithm
+
+PFRA collects the pages that have not been accessed for a long time in the
+inactive list. page move from active and inactive list.
+
+PFRA entry point:   - low on memory reclaiming  -> alloc_page() fails
+                    - Hibernation reclaiming
+                    - periodic reclaiming       -> kswap thread
+
+Understanding Linux kernel Figure 17.3 -> when reclaim is used
+
+LRU list:   - active
+            - inactive  -> page should be stolen from this list
+PG_lru and PG_active to determine which LRU list
+
+Understanding Linux kernel Figure 17.4 -> move from inactive to active list
+
+refill_inactive_zone() -> move page from active to inactive
+page_referenced() -> check if page recently moved/referenced
+
+swap_tendency: determines whether the function will move all kinds of pages or
+just the pages that do no belong to the user mode address spaces. Determine if
+User mode address space pages should be moved in the inactive list
+
+swap tendency = mapped ratio/2 + distress + swapiness
+mapped ratio = percentage of pages in all memory zones
+
+pageout() -> when dirty page must be written to disk
+
+shrink_zone() -> reclaim 32 pages from the zone's inactive done by shrink_cache()
+                 and the function invoke refill_inactive_zone()
+
+shrink_cache() -> extract from the zone's inactive lust a group of pages and
+invoke shrink_list() function to effectively perform page frame reclaiming
+
+do_swap_page
+
+Does Linux consider page locality?
+
+nr_scan_(in)active = number of (in)active pages to be scanned when reclaiming
+                     memory
+nr_(in)active = number of pages in the zone's (in)active list
+
+if local variable nr_(in)active are both 0 -> no page reclaim
+
+reclaim per batch of 32 pages till nr_to_reclaim not 0
+
+Kernel FPU
+----------
+kernel_fpu_begin(void)
+kernel_fpu_end(void)
+
+
+Creating processes and thread
+-----------------------------
+Thread  -> pthread_create -> Clone()
+Process -> Fork()
+
+PID  -> Process ID
+TGID -> Thread Group ID
+
+- Each thread and processes has a different PID
+- Process PID = TGID
+- Thread inherit the TGID of the parent
+
+Each process has it's own virtual memory address space.
+Threads (of the same process) share the virtual address space.
+
+If program run from shell -> shell fork() a child process and then call execve()
+which create a new memory space and map the program file into memory
+
+Paging
+------

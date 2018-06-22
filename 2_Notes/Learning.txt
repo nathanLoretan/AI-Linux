@@ -1,0 +1,83 @@
+Activation function
+-------------------
+https://fr.wikipedia.org/wiki/Fonction_d%27activation
+
+C4.5
+----
+Use for classification
+https://fr.slideshare.net/aorriols/lecture5-c45
+https://fr.slideshare.net/aorriols/lecture6-c45
+
+reinforcement
+--------------------------------------------------------------------------------
+
+https://towardsdatascience.com/introduction-to-various-reinforcement-learning-algorithms-i-q-learning-sarsa-dqn-ddpg-72a5e0cb6287
+https://towardsdatascience.com/introduction-to-various-reinforcement-learning-algorithms-part-ii-trpo-ppo-87f2c5919bb9
+
+model-free
+on-line
+on-policy
+
+Q-Learning  -> estimate Q of s+1 with max(A, Q(s+1, a e A)) using max
+            -> value-based
+            -> one step Q-learning
+            -> n-step Q-learning,
+
+SARSA       -> use the actual Q(s+1, a+1)
+            -> value-based
+
+DQN         -> Q-learning and deep learning => each node is an action
+
+DDPG        -> (Deep Deterministic Policy Gradient)
+
+TRPO        -> method for policy gradient
+            -> policy gradient
+
+PPO         -> same than TRPO
+
+A3C         -> actor-critic algorithm
+            -> policy gradient
+            -> critic = estimate of the value function
+            -> actor  = estimate of the policy.
+
+NAF         -> policy gradient
+GAE         -> policy gradient
+
+NEAT        -> neural network + genetic algorithm
+
+https://www.youtube.com/watch?v=xvRrgxcpaHY
+
+Q-Learning VS SARSA
+------------------
+https://studywolf.wordpress.com/2013/07/01/reinforcement-learning-sarsa-vs-q-learning/
+
+TRPO
+----
+http://178.79.149.207/posts/trpo.html
+https://www.youtube.com/watch?v=CKaN5PgkSBc
+
+PPO
+---
+http://coach.nervanasys.com/algorithms/policy_optimization/ppo/index.html
+policy-based
+
+NAF
+---
+http://coach.nervanasys.com/algorithms/value_optimization/naf/index.html
+
+A3C
+---
+https://cgnicholls.github.io/reinforcement-learning/2017/03/27/a3c.html
+
+Advantage
+---------
+how good the action is compared to the average of all the action
+https://datascience.stackexchange.com/questions/15423/understanding-advantage-functions
+
+Deep learning
+--------------------------------------------------------------------------------
+BNN     -> binary neural network
+        -> weight and activation only 1 0 -1 only at forward pass
+        -> need to memorize real-value
+
+QNN     -> same than BNN but use quantization to have more value

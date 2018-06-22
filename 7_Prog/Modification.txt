@@ -1,0 +1,118 @@
+MODIFICATIONS:
+--------------
+task_tick_fair()        modified        task_tick_smart()       smart.c
+struct cfs_rq           modified        struct cfs_rq           sched/sched.h
+struct rq               added           struct sfs_rq           sched/sched.h
+entity_tick()           modified        entity_tick()           smart.c
+update_curr()           modified        update_curr()           smart.c
+update_curr_fair()      modified        update_curr_smart()     smart.c
+smart.c                 added           update_aistats()
+                                        update_rewards()
+                                        update_state()
+                                        update_weights()
+                                        update_next()
+                                        update_min_exec_runtime()
+include/sched.h         added           struct sched_aistats    include/sched.h
+include/sched.h         added           struct sched_ai         include/sched.h
+sched_entity            added           struct sched_aistats    include/sched.h
+                                        struct sched_ai
+sfs_rq                  added           list sched_entities     sched/sched.h
+sched_entity            modified        next_se                 include/sched.h
+account_cfs_rq_runtime  modified        account_sfs_rq_runtime  smart.c
+pick_next_task_fair()   modified        pick_next_task_smart()  smart.c
+pick_next_task()        added           smart_sched_class       core.c
+pick_next_entity()      modified        pick_next_entity()      smart.c
+__pick_first_entity()   modified        __pick_first_entity()   smart.c
+__pick_next_entity()    modified        __pick_next_entity()    smart.c
+__pick_last_entity()    modified        __pick_last_entity()    smart.c
+__enqueue_entity()      modified        __enqueue_entity()      smart.c
+__dequeue_entity()      modified        __dequeue_entity()      smart.c
+put_prev_entity()       modified        put_prev_entity()       smart.c
+set_next_entity()       modified        set_next_entity()       smart.c
+enqueue_task_smart()    modified        enqueue_task_smart()    smart.c
+init_cfs_rq()           modified        init_cfs_rq()           smart.c
+task_fork_smart()       modified        task_fork_smart()       smart.c
+smart.c                 added           add_aistats()           smart.c
+                                        remove_aistats()
+
+NOT USEFUL: // NOTE: USELESS
+-----------
+calc_delta_fair()
+scale_load_down()       -> Used for fixed point
+__calc_delta_fair()
+__update_inv_weight()
+
+sched_vslice()
+trace_sched_stat_runtime()
+
+update_min_vruntime()
+max_vruntime()
+min_vruntime()
+entity_before()
+
+__pick_next_entity()
+__pick_last_entity()
+
+wakeup_preempt_entity()
+wakeup_gran()
+
+place_entity()
+
+TODO:
+-----
+
+update_min_exec_runtime()       _> implement
+
+enqueue_entity()    -> Remove cfs stuff
+dequeue_entity()    -> Remove cfs stuff
+
+_sched_fork()       -> initialise sched_entity
+init_cfs_rq()       -> initialise AI
+
+usleep_range()          -> set attribute
+msleep()                -> set attribute
+msleep_interruptible()  -> set attribute
+
+down()                   -> set attribute
+up()                     -> set attribute
+
+pick_next_entity_smart()        -> set attribute
+
+pick_next_entity_smart()        -> update_curr()
+put_prev_entity()               -> update_curr()
+schedule_tick()                 -> update_curr()
+yield_task_fair()               -> update_curr()
+
+put_prev_task_fair()    -> What ??
+set_curr_task_fair()    -> What ??
+
+set_next_buddy()    -> What ??
+set_last_buddy()    -> What ??
+set_skip_buddy()    -> What ??
+
+yield_to_task_fair()    -> What ??
+check_preempt_wakeup()  -> What ?? Don't care
+
+task_fork_fair()
+
+QUESTION:
+- is curr on the runqueue, on_rq == 1 ????
+        - with enqueue_entity and dequeue_entity when activate and desactivate
+        a task
+        - Task or task_struct could be in run-queue or not
+
+- Update_curr when:
+        - scheduler_tick
+        - scheduler
+                - pick_next_entity_smart
+                - put_prev_entity
+                - enqueue_entity
+                - dequeue_entity
+
+update_curr == update the state of the environment
+
+
+MAY BE USEFUL:
+--------------
+ mul_u64_u32_shr()
+ SCHED_FIXEDPOINT_SHIFT

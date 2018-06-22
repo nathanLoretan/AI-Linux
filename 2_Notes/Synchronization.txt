@@ -1,0 +1,51 @@
+Which thread should be released at first ?
+Spinning or blocking ?
+
+IDEA: Waiting average by lock -> if greater than a learned level -> spinlock
+
+Current Linux Synchronization:
+------------------------------
+lock & Semaphore
+When the lock is released, the wake_up() function is called which determine
+which process to wake up.
+
+Smartlocks
+----------
+Smartlocks prioritizes the faster thread
+recent patch for Real-Time Linux modies kernel support for user-level locks so
+that locks switch wait strategies from spinning to blocking if locks spin too long.
+Smartlocks use a Reinforcement Learning (RL)
+use lock acquisition scheduling
+
+lock divided in three part:
+    protocol selector   -> adaptation -> like reactive lock, RL to choose best
+                                         protocol
+    wait strategy        -> spinning or blocking -> choose best strategies
+    lock acquisition scheduler -> which thread should get the lock
+
+Self-Aware Synchronization Mechanisms and Decision Making Techniques
+--------------------------------------------------------------------
+for Contention-Aware Thread Mapping
+-----------------------------------
+An affnity mask is a bit mask associated with each task indicating what
+processor(s) it should be run on by the scheduler of the OS
+
+In order to exploit the locality of the critical section, data tasks that require
+the same lock should be moved to the processor that is executing the task that
+currently holds the lock
+
+Separate the task in group and move them to the same core
+
+Reactive Synchronization Algorithms for Multiprocessors
+-------------------------------------------------------
+dynamically choose protocols in response to the level of contention
+dynamic selection of synchronization protocol
+
+
+Empirical Studies of competitive spinning for a shared memory Multiprocessors
+------------------------------------------------------------------------------
+on-line: calculate a spin threshold -> spin for a time before blocking
+Spinthreshold
+
+NOTE: It is not useful to spin if another thread in the core need to use the
+same resource

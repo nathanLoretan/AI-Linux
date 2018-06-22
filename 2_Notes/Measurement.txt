@@ -1,0 +1,24 @@
+Performance:
+------------
+perf: Use Performance Monitoring Unit NOTE: command line
+
+http://rts.lab.asu.edu/web_438/project_final/CSE_598_Performance_Monitoring_Unit.pdf
+
+Simulation:
+-----------
+lkp-tests: Benchmark
+LinSched: Linux scheduler simulator
+LTTng: Tracing
+Phoronix Test Suite
+
+
+Cache ratio:
+-----------
+PAPI NOTE: For user space
+
+Page cache ratio:
+------------------
+cachestat: show Linux page cache hit/miss statistics NOTE: command line
+
+--------------------------------------------------------------------------------
+TAU

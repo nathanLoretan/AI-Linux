@@ -1,0 +1,214 @@
+Scheduler.txt
+--------------------------------------------------------------------------------
+
+Current Linux Scheduler:
+------------------------
+https://notes.shichao.io/lkd/ch4/
+
+- O(1) -> timeslice
+- CFS -> use priority, vruntime instead of timeslice
+- BFS
+
+- Linux is a preemptive scheduler, try to keep it like this
+
+Linux consider either the class:
+    Interactive
+    batch
+    real-time
+or
+    CPU bound
+    I/O bound
+
+Other algorithms:
+-----------------
+Shortest Job First (SJF)
+Shortest Time Remaining First (SRTF)
+
+Applying Machine Learning Techniques to Improve Linux Process Scheduling
+------------------------------------------------------------------------
+Learn CPU timeslice
+Technics used:  C4.5
+Use special_time_slice
+Learn the special_time_slice for each process
+
+1) The program 'X' is given to C4.5 decision tree as an
+   input.
+2) The decision tree will classify 'X' and output the STS.
+3) We send this STS information to modified scheduler
+   through a system call.
+4) The scheduler instructs the CPU such that CPU allocates
+   STS ticks to 'X'.
+5) The CPU allocates STS ticks to 'X' and it will run with
+   minimum TaT.
+
+NOTE: Don't explain the classes used
+
+A Machine Learning Approach for Improving Process Scheduling: A Survey
+----------------------------------------------------------------------
+performance can then be improved using data from previous executions
+attributes used:
+    - input size
+    - page reclaims
+    - page fault
+    - virtual memory in use by the process
+    - size of memory used by process code
+    - address below which the process code can execute
+    - space used by process shared libraries
+
+Three majors groups:
+    - batch
+    - deamon
+    - interactive
+
+6 groups:   - Interactive App -> editors of text, web browser
+            - Deamons -> processes that run in the background and are ready to instruction
+            - Desktop Features
+            - Network
+            - Text Command
+            - Kernel Threads
+            - Other
+
+NOTE: Used unsupervised learning to train the machine
+
+Technics Classification to seach best attributes:
+    - Correlation features selection (CFS)
+    - Genetic search
+    - InfoGain
+
+Technic to select from best attribute:
+    - C4.5 (NOTE: Best)
+    - MLP
+Predict the CPU burst lengths of processes IDEA: Use it as adding value in CFS
+
+Semantical Cognitive Scheduling NOTE: Selection next process
+-------------------------------
+https://fr.slideshare.net/igalshilman/semantical-cognitive-scheduling
+Try to use a Utility value for a process -> ordering the process
+Use permutation tree
+Think "How good is it to run this process in this state"
+State = CPU, MEM, IO, NET
+Utility of a process = Alpha * CPU + Beta * I/O + Gamma * MEM + Delta * NET
+utility function -> value to each process and state
+transition function -> from P and S1 go to S2
+Take best <p1, p2> or <p2, p1>
+
+state space consist of:
+    4 device states (E0; ::;E3),
+    5 CPU related states (C0; ::;C4),
+    7 general system states (S0; ::; S6)
+
+NOTE: Explain how to select the processes regarding utility and transition
+      but don't explain how to get those information
+
+Real-Time Scheduling via Reinforcement Learning
+-----------------------------------------------
+each task Ti consist of an infinite sequence of jobs (Ti,j) where j=0-infinite.
+Jobs cannot be preempted.
+
+The task scheduling problem is modeled as an MDP over a set of utilization
+states X = Nn
+
+task scheduling problem modeled as an MDP
+
+(A1) Inter-task job durations are independently distributed.                -> between task
+(A2) Intra-task job durations are independently and identically distributed -> in the task
+
+P(.|i) = duration of every job of Ti
+
+target utilization ui specified by each task
+xi(t) = number of quanta during which task Ti for interval [0,t)
+
+each state x is an n-vector x = (x1, ..., xn) where xi = total number of quanta
+during which task Ti occupied the shared resource since system initialization
+
+each action i = decision to run task Ti. Transition determined according to task
+duration distributions
+
+at state X={x1, ..., xn} after executing Ti, only xi change in the state
+
+online: P(t|i) = nbr time task ti run t duration / nbr of time task ti run
+
+Every state
+on this ray has zero cost, and states with the same dis-
+placement  from  the  target  utilization  ray  have  equal
+cost.
+
+NOTE: Cost = starvation
+NOTE: W for WCET = vruntime
+NOTE: state = vruntime of each process
+NOTE: Ti = decomposition of vruntime
+NOTE: ui = defined by process priority and average run time
+
+A Machine Learning-Based Approach to Estimate the CPU-Burst Time NOTE: Timeslice prediction
+----------------------------------------------------------------
+NOTE: Same than Applying Machine Learning Techniques to Improve Linux
+for grid computing
+ML for learn CPU-burst time instead of average
+Technics:
+        SMOReg
+        MLP
+        Decision tree
+        K-NN
+1. process attributes -> presented as features attributes
+2. feature selection NOTE: Previous article present ML for this step
+
+intersting Attributes:
+    id
+    waittime
+    runtime
+    average CPU time
+    used memory
+    request memory
+    page number
+
+NOTE: Don't explain which classes are used to differentiate the processes
+
+LEARNING SCHEDULER PARAMETERS FOR ADAPTIVE PREEMPTION NOTE: Timeslice prediction
+-----------------------------------------------------
+NOTE: Same than Applying Machine Learning Techniques to Improve Linux
+idea of adaptative time slice
+try parameter estimation
+Use Temporal difference method
+Use readelf and size commands to get the attributes
+Attribute used:
+    RoData (read only data)
+    Hash (size of hash table)
+    Bss (size of uninitialized memory)
+    DynSym (size of dynamic linking table)
+    StrTab (size of string table).
+
+IDEA:
+    User time (seconds)
+    Involuntary context switches1
+    Voluntary context switches
+    Page size (bytes)
+    Minor (reclaiming frame) page faults
+    Percent of CPU this job got 98%
+    Maximum resident set size (kbytes)
+    File system outputs
+    Elapsed (wall clock) time
+
+Use reinforcement to assigned new timeslice to a process
+
+reinforcement learning framework for utility-based scheduling
+-------------------------------------------------------------
+approximation of the value function that gives expected long-term productivity
+of each machine
+
+determine how many CPUs should be allocated to each job
+
+encode the machine state with:  - x1 average unit utility
+                                - x2 expected time remaining until completion
+                                - x3 number of currently idle CPU
+x1, x2, x3 is either small or large
+Define utility of x1, x, x3 small and large
+Use temporal difference for reinforcement learning
+
+Use rulebase parameter which is a sum of value of x
+fuzzy rulebase were used to represent V(x)
+
+NOTE: Divide the value of x1, x2, x3 in two to define the state but use the
+      numerical value to calculate p which represent V(x)
+
+Utility-based Scheduling for periodic tasks
+-------------------------------------------

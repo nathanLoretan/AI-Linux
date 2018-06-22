@@ -1,0 +1,253 @@
+https://elixir.bootlin.com/linux/v4.17.2/ident
+
+Used Kernel version: 4.17.2
+
+task priority == load.weight
+task runtime  == sched.avg.runnable_avg_period
+task load avg == sched.avg.load_avg_contrib
+
+Scheduler:
+----------
+https://www.embedded.com/design/operating-systems/4204929/Real-Time-Linux-Scheduling-Part-1
+https://www.embedded.com/design/operating-systems/4204971/Real-Time-Linux-Scheduling-Part-2
+https://www.embedded.com/design/operating-systems/4204980/Real-Time-Linux-Scheduling-Part-3
+
+Priority: RT -> CFS -> IDLE, changed to RT -> myScheduler -> IDLE
+
+- Folder kernel/sched
+- Actually core.c, sched.h, fair.c
+- Replace fair.c -> myScheduler.c
+
+1. Must implement the scheduler throught: struct sched_class -> sched.h line 1463
+2. Create the functions for sched_class, use fair.c
+3. Add the scheduler policy with __setscheduler()
+4. don't forget to add the file into Makefile obj.y += myScheduler.o
+5. define the selection of the scheduler in init/kConfig
+        -> with setting for the constant factor
+
+CPU Controller -> CONFIG_FAIR_GROUP_SCHED => init/kConfig
+
+- SFS (smartly fair scheduler) CONFIG_SCHED_SFS
+- smart.c
+
+scheduler_tick() core.c
+        -> task_tick() struct sched_class
+                -> get run queue cfs_rq of each entity
+                -> entity_tick() fair.c for each entity_sched  ==   Core
+                        -> update_curr(cfs_rq); fair.c
+                                -> update_min_vruntime() fair.c re-order the red-black tree
+                        -> update_load_avg(cfs_rq, curr, UPDATE_TG); fair.c  use with load balance, Update task and its cfs_rq load average
+                        -> update_cfs_group(curr);                   fair.c  I DON'T KNOW ????
+
+struct task_struct sched.h
+
+schedule() core.c
+        -> __schedule() core.c
+                -> pick_next_task()
+                        -> fair_sched_class.pick_next_task()
+                                -> pick_next_task_fair()
+
+scheduler_tick each Hz by timer code
+schedule_timeout trig a time for schedule()
+
+update_curr called by :
+        - reweight_entity
+        - enqueue_entity
+        - dequeue_entity
+        - put_prev_entity               -> when schedule()
+        - check_preempt_wakeup
+        - ...
+
+In practice, the virtual runtime of a task is its actual runtime normalized to the total
+number of running tasks.
+
+group tasks, it may be desirable to first provide fair CPU time to each user on the
+system and then to each task belonging to a user.
+        -> CONFIG_CGROUP_SCHED / CONFIG_RT_GROUP_SCHED / CONFIG_FAIR_GROUP_SCHED
+        -> let the administrator create arbitrary groups of tasks
+        -> entity_tick() use with group
+
+An entity can be a single task or a groupd of task. When scheduling, the vruntime
+is calculated:
+        1. task in the group of tasks
+        2. entity=group of tasks and parent of the curr task in the group of group of
+           task
+        3. ... until no more parent of the entity
+
+Will not really change with group or not if correctly implemented
+
+use task CPU load not priority
+
+TODO:
+- scheduler class
+- rewrite task_tick, enqueu_tick, put_prev_task, pick_next_task, ...
+- Update and select next task at update_curr
+
+- Modify only the sched_entity
+
+Attributes to update:
+ 	- avg running           -> in update_curr
+ 	- nr semaphores held	-> runtime __down() and __up() in sem.c
+ 	- nr of time blocked	-> runtime __down() and __up() in sem.c
+ 	- nr of time sleeping   -> runtime msleep and usleep in timer.c
+
+QUESTION:
+	- skip buddy -> set_skip_buddy() ->  yield_task_fair()
+	- next buddy -> set_next_buddy()
+	- last buddy -> set_last_buddy()
+
+Balance:
+--------
+
+task load as the amount of time that the task was runnable during the time that
+it was alive
+
+https://lwn.net/Articles/80911/
+https://lwn.net/Articles/639543/
+
+- Folder kernel/sched
+- Actually fair.c
+- Replace fair.c -> myScheduler.c
+
+1. define tick for load_balance()
+2. define load_balance when one CPU is idle
+3. define constant factor and selection of common load_balance and AI loadbalance in init/kConfig
+
+rebalance_domains() or idle_balance() -> load_balance()
+                        |
+                        |_ called by schedule if CPU is about to become idle
+
+_nohz_idle_balance or run_rebalance_domains
+                        |
+                        |_ triggered wen needed from te scheduler tick
+
+- SB (Smart Balance) -> CONFIG_SCHED_SB
+
+- each CPU has a base scheduling domain
+- scheduling domain spans a number of CPUs -> "balance process load among these CPUs"
+- scheduling domain can be child of another scheduling domain
+- scheduling domain has one or more CPU groups
+- group contains the physical CPUs or virtual CPUs or nodes to which to domain belongs
+- group may be shared among CPU
+
+- balancing within a sched domain occurs between groups
+- each group is an entity with a load
+
+scheduler_tick() core.c
+        -> trigger_load_balance() fair.c if CONFIG_SMP
+                if (time_after_eq(jiffies, rq->next_balance))
+                        raise_softirq(SCHED_SOFTIRQ);
+                nohz_balancer_kick()    -> for NO_HZ mode
+
+when SOFTIRQ triggered by scheduler_tick() when balance_interval pass for the runqueue
+        -> run_rebalance_domains() fair.c
+                -> nohz_idle_balance() fair.c
+                        -> rebalance_domains()
+                -> update_blocked_averages() fair.c
+                -> rebalance_domains() fair.c
+                        -> for_each_domain(cpu, sd) check each schedule domain where the
+                                                    current CPU is in from base
+                                -> load_balance() fair.c()
+                                -> sd->last_balance = jiffies;
+                                -> interval = sd->balance_interval;
+                                -> next_balance = sd->last_balance + interval;
+
+load_balance()
+        -> find_the_busiest_group()
+        -> find_the_busiest_queue()
+        -> QUESTION: Move task ???
+                1. Determine how much task should be move
+                        -> sysctl_sched_nr_migrate = 32; Number of tasks to
+                                                         iterate in a single
+                                                         balance run. Limited
+                                                         because this is done
+                                                         with IRQs disabled.
+                2. detach_tasks() from busiest_rq
+                        -> detach_task()
+                3. attach_tasks() to new rq
+                        -> attach_task()
+                4. check if task with fixed affinity
+
+QUESTION Update load:
+1. update_load_avg() update task and cfs_rq load average
+        -> __update_load_avg_se                 -> update load of schedul domain
+                -> __update_load_sum()
+                -> __update_load_avg()
+        -> update_cfs_rq_load_avg()             -> update load of runqueue
+                -> __update_load_avg_cfs_rq()
+                        -> __update_load_sum()
+                        -> __update_load_avg()
+        -> propagate_entity_load_avg()
+        -> update_tg_load_avg()
+
+2. update_blocked_averages() do the same
+        -> update_cfs_rq_load_avg()
+
+NO_HZ -> Reducing scheduling-clock ticks
+
+TODO:
+- load_balance()
+        -> watch among the group (each CPU)
+        -> change find_the_busiest_group() and find_the_busiest_queue()
+        -> calculate with they worst process if the process should be moved
+           in the current CPU
+        -> modify detach and attach tasks
+- update_load_avg() update the different attributes used by the scheduler and migration
+- u
+
+
+Page reclaiming:
+----------------
+
+- Folder mm
+- Actually vmscan.c
+- Replace vmscan.c -> myScan.c
+
+  Version 2                 Version 4
+shrink_zone()          -> shrink_node()
+shrink_list()          -> shrink_list()
+
+shrink_cache()         -> shrink_node()
+shrink_page_list()     -> refill_inactive_zone()
+
+
+================================================================================
+Configuration:
+
+-> CONFIG_SCHEDSTATS
+
+================================================================================
+Module:
+-------
+https://www.tldp.org/LDP/lkmpg/2.6/html/lkmpg.html
+
+List: lsmod
+Load: insmod or modprobe
+Unload: rmmod
+
+Change kernel parameter with sysctl:
+------------------------------------
+sysctl: examining and changing kernel parameters at runtime.
+
+-> list of all scheduler related sysctl variables
+
+
+
+LFS:
+----
+
+--------------------------------------------------------------------------------
+https://stackoverflow.com/questions/23358086/vnc-server-is-running-on-15901
+http://mgalgs.github.io/2015/05/16/how-to-build-a-custom-linux-kernel-for-qemu-2015-edition.html
+
+Install the modules
+-------------------
+make INSTALL_MOD_PATH=./ modules_install
+
+if necessary: create boot directory
+
+sudo make INSTALL_PATH=./boot install
+
+Run Qemu
+--------
+qemu-system-x86_64 -kernel bzImage -initrd initrd.img-4.16.11 -m 512M
