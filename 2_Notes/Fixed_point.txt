@@ -1,0 +1,45 @@
+
+NOTE: Possible to use kernel_fpu_begin() and kernel_fpu_end() but not a good
+      idea to use floating point unit in the kernel, it would slow down the
+      system
+
+Q (number format):
+https://en.wikipedia.org/wiki/Q_%28number_format%29
+http://www.digitalsignallabs.com/downloads/fp.pdf
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0066d/CHDFAAEI.html
+https://www.allaboutcircuits.com/technical-articles/fixed-point-representation-the-q-format-and-addition-examples/
+
+X = x7 × 2^3  + x6 × 2^2  + x5 × 2^1  + x4 × 2^0 +
+    x3 × 2^−1 + x2 × 2^−2 + x1 × 2^−3 + x0 × 2^−4
+
+length:
+-------
+
+bit length = nbr Integer bit + nbr fraction bits + sign bits
+range = [-2^nbr Integer bit, 2^nbr Integer bit)
+step = 2^-nbr fraction bits
+
+Operation:
+----------
+
+ a+b -> fixed point: result = a+b
+ a-b -> fixed point: result = a-b
+ a*b -> fixed point:
+
+        temp = a * b
+        temp += (1 << (Q-1)) -> Round of the last decimal
+        result = temp >> Q
+
+ a/b -> fixed point:
+
+        temp = a << Q
+
+        if temp >= 0 && b >= 0 or temp < 0 && b < 0     -> if result positive, round up
+                temp += b / 2
+        else                                            -> if result positive, round down
+                temp -= b/2
+
+        result = temp/b
+
+Overflow:
+---------

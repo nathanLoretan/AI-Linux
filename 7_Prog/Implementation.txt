@@ -1,96 +1,68 @@
-scheduler_tick()                                                core.c
-        task_tick_smart()                                       smart.c
-                entity_tick()
-                        update_curr()
-                                update_aistats()
-                                update_rewards()
-                                update_state()
-                                update_min_exec_runtime()
+RQ INIT
+=======
 
-Originally, update the vruntime of curr and the min_vruntime of rb-tree
-Modified, update the state of the task and the runqueue
+sched_init()                                            core.c
+        init_synch_point()
+        for_each_possible_cpu() ->
+                init_cfs_rq()                           smart.c
 
--------
+Modified, Initialize the different factors and weights used by the AI and
+          initialize the list that store the entity
 
-resched_curr()  -> set TIF_NEED_RESCHED
+CREATE NEW PROCESS
+==================
 
-schedule()                                                      core.c
-        __schedule()
-                pick_next_task()
-                        pick_next_task_smart()                  smart.c
-                                update_curr()
-                                pick_next_entity()
-                                        update_weights()
-                                        update_next()
-                		put_prev_entity()
-                                        update_curr()           -> is it necessary ???
-                                        _enqueue_entity()
-                		set_next_entity()
-                                        _dequeue_entity()
+kernel_thread()                                         fork.c
+  do_fork()
 
-Originally, select the next entity to run, push the previous one on the queue and pop
-            the next one from the queue
-Modified, the same
+do_fork()                                               fork.c
+  _do_fork()
+          copy_process()
+                          dup_task_struct()       -> create the task
+                          sched_fork()            core.c
+          wake_up_new_task()                      core.c
+                  activate_task()                 core.c
 
--------
+sched_fork()                                      core.c -> set rq of se
+        __sched_fork()                            -> set sched_entity
+        __set_task_cpu()
+                set_task_rq()
+        task_fork_smart()                         smart.c
+                init_aistats()
+                if curr -> update_curr
+                place_entity()                    TODO
+                normalize state
 
-down()                                                          semaphore.c
-        __down()
-                __down_common()
-                        __set_current_state(TASK_UNINTERRUPTIBLE)
-                        list_add_tail(wait_list)
-                        schedule_timeout()                      timer.c
-                                schedule()                      core.c
+Modified, initialize the aistats structure of the new state, give the state
+          of the parent process and normalize the state
 
-Modified, None
-
--------
-
-up()                                                            semaphore.c
-        __up()
-                list_first_entry(wait_list)
-                list_del()
-                wake_up_process()                               core.c
-
-Modified, None
-
--------
-
-wake_up_process()                                               core.c
-        try_to_wake_up()
-                ttwu_remote() if p->on_rq
-                        ttwu_do_wakeup()
-                                p->state = TASK_RUNNING
-
-                ttwu_queue()
-                        ttwu_do_activate()
-                                ttwu_activate()
-                                        activate_task()
-                                ttwu_do_wakeup()
-                                        p->state = TASK_RUNNING
-
-Modified, None
-
--------
+ADD TASK IN QUEUE
+=================
 
 activate_task()                                                 core.c
         enqueue_task()
                 enqueue_task_smart()                            smart.c
                         enqueue_entity()                        -> initialise vruntime of the process
-                                update_curr()                   -> is it necessary ???
-                                __enqueue_entity()
+                                if curr -> normalize
+                                update_curr()
+                                if !state_used -> add_aistats()
+                                if !curr & !sleep -> normalize
+                                if !curr -> __enqueue_entity()
                                 se->on_rq = 1
 
-Modified, None
+Modified,
 
--------
+REMOVE TASK QUEUE
+=================
 
 deactivate_task()                                               core.c
         dequeue_task()
                 dequeue_task_smart()                            smart.c
                         dequeue_entity()
-                                update_curr()                   -> is it necessary ???
-                                __dequeue_entity()
+                                update_curr()
+                                if !state_used -> remove_aistats()
+                                if !curr -> __dequeue_entity()
+                                if !sleep -> Normalize state
                                 se->on_rq = 0
                         set_next_buddy()
 
@@ -109,13 +81,142 @@ signal_pending_state(prev->state, prev)
         return 0 if state not (TASK_INTERRUPTIBLE | TASK_WAKEKILL)
         return 0 if TASK_INTERRUPTIBLE and signal not yet received
 
+Modified,
+
+UPDATE CURRENT ENTITY STATE AND RUNQUEUE STATE
+==============================================
+
+scheduler_tick()                                                core.c
+        task_tick_smart()                                       smart.c
+                entity_tick()
+                        update_curr()
+                                update_aistats()
+                                update_state()
+                                update_rewards()
+
+Modified, update the state of the entity and the runqueue
+
+SELECT NEW PROCESS
+==================
+
+resched_curr()  -> set TIF_NEED_RESCHED
+
+schedule()                                                      core.c
+        __schedule()
+                pick_next_task()
+                        pick_next_task_smart()                  smart.c
+                                if curr->on_rq -> update_curr()
+                                pick_next_entity()
+                                        update_weights()
+                                        update_next()
+
+                		put_prev_entity()
+                                        if still runnable
+                                                update_curr()
+                                                _enqueue_entity()
+
+                                set_next_entity()
+                                        _dequeue_entity()
+
+Modified, Calculate the utility of the next task and select it to run next
+
+SEMAPHORE and READ/WRITE SEM
+============================
+
+down()                                                          semaphore.c
+        __down()
+                __down_common()
+                        __set_current_state(TASK_UNINTERRUPTIBLE)
+                        list_add_tail(wait_list)
+                        block_count++
+                        schedule_timeout()                      timer.c
+                                schedule()                      core.c
+        lock_count++
+
+NOTE: same for down_interruptible() down_killable() down_timeout()
+NOTE: not for down_trylock() -> no wait
+
+down_read()                                                     rwsem.c
+        __down_read()
+                __down_read_common()                            rwsem-spinlock.c
+                        block_count++
+                        list_add_tail(wait_list)
+                        schedule()                              core.c
+        lock_count++
+
+NOTE: same for down_read_killable() down_write() down_write_killable()
+NOTE: not for down_read_trylock() and down_write_trylock() -> no wait
+
+up()                                                            semaphore.c
+        __up()
+                list_first_entry(wait_list)
+                wake_up_process()                               core.c
+
+up_read()                                                       rwsem.c
+        __up_read()                                             rwsem-spinlock.c
+                __rwsem_wake_one_writer()
+                        list_entry()
+                wake_up_process()
+
+up_write()                                                      rwsem.c
+        __up_write()                                            rwsem-spinlock.c
+                __rwsem_do_wake()
+                         list_entry()
+                wkae_up_process()
+
+Modified, add lock_count++ and block_count++
+
+MUTEX
+=====
+
+NOTE: slowpath == sleep if fast path doesn't work
+
+mutex_lock()                                                    mutex.c
+        __mutex_lock_slowpath()
+                __mutex_lock()
+                        __mutex_lock_common()
+                                list_add_tail(waiter.list)
+                                block_count++
+        lock_count++
+
+NOTE: same for mutex_lock_interruptible() mutex_killable()
+NOTE: not for mutex_trylock()
+
+mutex_unlock()                                                    mutex.c
+        __mutex_unlock_slowpath()
+                list_first_entry()
+                wake_up_add()
+                wake_up_q()
+
+Modified, add lock_count++ and block_count++
+
+SPIN-LOCK
+=========
+
+spin_lock()                                                     spinlock.h
+        raw_spin_lock()
+                _raw_spin_lock()                                spinlock.c
+                        __raw_spin_lock()                       spinlock_api_smp.h
+                                do_raw_spin_lock()              spinlock_debug.c
+
+NOTE: same for spin_lock_irqsave() spin_lock_bh() write_lock() read_lock()
+
+spin_unlock()                                                   spinlock.h
+        raw_spin_unlock()
+                __raw_spin_unlock()                             spinlock_api_smp.h
+                        do_raw_spin_unlock()                    spinlock_debug.c
+
+NOTE: same for spin_unlock_irqrestore() spin_unlock_bh() write_unlock() read_unlock()
+
 Modified, None
 
--------
+SLEEP
+=====
 
 udelay()        -> busy_wait_loop
 
 usleep_range()                                          timer.c
+        sleep_count++
         __set_current_state(TASK_UNINTERRUPTIBLE)
         schedule_hrtimeout_range()                      hrtimer.c
                 ...
@@ -128,11 +229,13 @@ usleep_range()                                          timer.c
                 timerqueue_del                          timerqueue.c
 
 msleep()                                                timer.c
+        sleep_count++
         schedule_timeout_uninterruptible()
                 __set_current_state(TASK_UNINTERRUPTIBLE)
         	schedule_timeout(timeout)
 
 msleep_interruptible()                                  timer.c
+        sleep_count++
         schedule_timeout_interruptible()
                 __set_current_state(TASK_INTERRUPTIBLE)
                 schedule_timeout(timeout)
@@ -141,30 +244,28 @@ schedule_timeout() -> callback function process_timeout
          process_timeout()                              timer.c
                 wake_up_process()                       core.c
 
-Modified, None
+Modified, add sleep_count++
 
--------
+WAKE UP
+=======
 
-kernel_thread()                                         fork.c
-        do_fork()
+wake_up_process()                                               core.c
+        try_to_wake_up()
+                ttwu_remote() if p->on_rq
+                        ttwu_do_wakeup()
+                                p->state = TASK_RUNNING
 
-do_fork()                                               fork.c
-        _do_fork()
-                copy_process()
-                                dup_task_struct()       -> create the task
-                                sched_fork()            core.c
-                wake_up_new_task()                      core.c
-                        activate_task()                 core.c
-
-sched_fork()                                            core.c -> set rq of se
-        __sched_fork()                                  -> set sched_entity
-        __set_task_cpu()
-                set_task_rq()
-        task_fork_smart()                       smart.c
+                ttwu_queue()
+                        ttwu_do_activate()
+                                ttwu_activate()
+                                        activate_task()
+                                ttwu_do_wakeup()
+                                        p->state = TASK_RUNNING
 
 Modified, None
 
--------
+KILL
+====
 
 do_exit()                                               exit.c
         set_current_state(TASK_UNINTERRUPTIBLE)
@@ -177,15 +278,8 @@ do_group_exit()
 
 Modified, None
 
--------
-
-sched_init()                                            core.c
-        for_each_possible_cpu() ->
-                init_cfs_rq()                           smart.c
-
-Modified, None
-
--------
+YIELD
+=====
 
 yield()                                                 core.c
         do_sched_yield()
@@ -212,31 +306,130 @@ Modified, None
 
 -------
 
-TODO:   1. Initialize AI in runqueue                    -> init_cfs_rq()                OK
-        2. Initialize sched_entity in new process       -> task_fork_smart()            OK
-        3. Update environement when deleting a task     -> dequeue()    remove_aistats(se);
-        4. Set attributes with macro:
-                sem_count       -> down(), up()
-                scheduled_count -> pick_next_task_smart()
-                runtime_sum     -> update_curr()
-                block_count     -> down(), spin_lock(), ...
-                sleep_count     -> msleep(), usleep(), msleep_interruptible()
-        5. Update the environment                       -> update_curr()
-                - creating
-                - deleting
-                - sleeping
-                - blocking
-                - scheduling
-                - wake-up
-        6. Calculate the utility of the next task       -> pick_next_task_smart() -> skip
-        7. Calcule and fixed point unit and overflow
-           if overflow, runtime - start...
-        8. Set kconfig:
+static void remove_aistats(struct cfs_rq *cfs_rq, struct sched_entity *old)
+static void add_aistats(struct cfs_rq *cfs_rq, struct sched_entity *new)
+
+TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()                OK
+        . Initialize sched_entity in new process       -> task_fork_smart()            OK
+        . Update environement when deleting a task     -> dequeue_entity()             OK
+        . Update environement when adding a task       -> enqueue_entity()             OK
+        . Change group                                                                 OK
+                -> switched_from() & task_change_group()
+                => detach_task_cfs_rq & attach_task_cfs_rq
+        . Calculate the utility of the next task       -> pick_next_task_smart()       OK
+        . Update the environment                       -> update_curr()                OK
+                - creating      OK
+                - deleting      OK
+                - sleeping      OK
+                - blocking      OK
+                - scheduling    OK
+                - wake-up       OK
+        . Set attributes with macro:
+                scheduled_count                         -> smart.c      OK
+                        pick_next_task_smart()
+
+                runtime_sum                             -> smart.c      OK
+                        update_aistats()
+
+                state                                   -> smart.c      OK
+                        update_state()
+                        enqueue_entity()
+                        dequeue_entity()
+                        task_fork_smart
+
+                sleep_count                             -> timer.c      OK
+                        usleep_range()
+                        msleep()
+                        msleep_interruptible()
+
+                lock_count
+                        down()                          -> semaphore.c  OK
+                        down_interruptible()
+                        down_killable()
+                        down_trylock()
+                        down_timeout()
+
+                        down_read()                     -> rwsem.c      OK
+                        down_read_killable()
+                        down_read_trylock()
+
+                        down_write()                    -> rwsem.c      OK
+                        down_write_killable()
+                        down_write_trylock()
+
+                        mutex_lock()                    -> mutex.c      OK
+                        mutex_lock_interruptible()
+                        mutex_lock_killable()
+                        mutex_trylock()
+
+                block_count, only the added to the wait list            OK
+                        __down_common()                 -> semaphore.c
+                        __down_read_common()            -> rwsem-spinlock.c
+                        __down_write_common()
+                        __mutex_lock_common()           -> mutex.c
+
+        . Average, Calcul, Fixed Point, Overflow                        OK
+
+                update_rewards()        OK
+                update_aistats()        OK
+                update_weights()        OK
+                update_next()           OK
+
+                add(a, b, ta, tb) 	 a + b
+                sub(a, b, t1, t2)  	 a - b
+                mul(a, b, t1, t2)	(a * b) >> Q
+                div(a, b, t1, t2)	(a << Q) / b
+
+                Type:
+                u32     ->      0 to 4,294,967,295
+                s32     ->      -2,147,483,648 to 2,147,483,647
+                u64     ->      0 to 18,446,744e12
+                s64     ->      -9,223,372e12 to 9,223,372e12
+
+                What to scale:
+                x avg_runtime   x alpha         x w_load        x rewards
+                x avg_block     x gamma         x w_avg_block   x ut
+                x avg_sleep     x q_value       x w_avg_sleep   x ut_sum
+                x avg_lock      x old_q_value   x w_avg_lock
+
+                Type definition: all s64
+                - alpha                         - scheduled_count
+                - gamma                         - state
+                - w_load                        - old_state
+                - w_avg_block
+                - w_avg_sleep                   - avg_runtime
+                - w_avg_lock                    - runtime_sum
+                - state                         - avg_block
+                - q_value                       - block_count
+                - old_q_value                   - avg_sleep
+                - ut_sum                        - sleep_count
+                - update                        - avg_lock
+                - rewards                       - lock_count
+                - min_start_state               - di
+                - min_state                     - ut
+
+                overflow:
+                        scheduled_count
+                        runtime_sum
+                        block_count
+                        sleep_count
+                        lock_count
+
+        . place_entity()                        OK
+        . synchronization_point
+                TODO: evaluate the weight and stop learning
+
+        . Remove everythings with vruntime ...
+
+        . Set kconfig:
                 CONFIG_SCHED_SFS
+                CONFIG_SCHED_SFS_SYNCH
+                CONFIG_SCHED_SFS_FIXP_SHIFT
                 CONFIG_SCHED_SFS_ALPHA
                 CONFIG_SCHED_SFS_GAMMA
                 CONFIG_SCHED_SFS_W_AGV_LOAD
                 CONFIG_SCHED_SFS_W_AGV_BLOCK
                 CONFIG_SCHED_SFS_W_AGV_SLEEP
                 CONFIG_SCHED_SFS_W_AGV_SEM
-        9. Remove everythings with vruntime
+
+                NOTE: the constant should already be scaled to the fixedpoint

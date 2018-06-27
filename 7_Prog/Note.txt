@@ -1,4 +1,6 @@
 https://elixir.bootlin.com/linux/v4.17.2/ident
+https://books.google.co.uk/books?id=uxhKDwAAQBAJ&pg=PA240&lpg=PA240&dq=linux+how+kernel+mutex+push+task+to+sleep&source=bl&ots=GFPzx6_c0J&sig=NraggxWPYnDpMZbtAMqWYn129ug&hl=en&sa=X&ved=0ahUKEwivkOfTgu_bAhVFCuwKHTZUC4QQ6AEIPjAB#v=onepage&q=linux%20how%20kernel%20mutex%20push%20task%20to%20sleep&f=false
+
 
 Used Kernel version: 4.17.2
 
@@ -171,8 +173,8 @@ load_balance()
 QUESTION Update load:
 1. update_load_avg() update task and cfs_rq load average
         -> __update_load_avg_se                 -> update load of schedul domain
-                -> __update_load_sum()
-                -> __update_load_avg()
+                -> ___update_load_sum()
+                -> ___update_load_avg()
         -> update_cfs_rq_load_avg()             -> update load of runqueue
                 -> __update_load_avg_cfs_rq()
                         -> __update_load_sum()

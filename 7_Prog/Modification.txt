@@ -34,6 +34,41 @@ init_cfs_rq()           modified        init_cfs_rq()           smart.c
 task_fork_smart()       modified        task_fork_smart()       smart.c
 smart.c                 added           add_aistats()           smart.c
                                         remove_aistats()
+                                        init_aistats()
+                                        prevent_overflow()
+                                        update_min_state()
+dequeue_entity()        modified        dequeue_entity()        smart.c
+enqueue_entity()        modified        enqueue_entity()        smart.c
+entity_before()         nodified        entity_before()         smart.c
+detach_task_cfs_rq()    modified        detach_task_cfs_rq()    smart.c
+attach_task_cfs_rq()    modified        attach_task_cfs_rq()    smart.c
+smart.c                 added           state_normalized()      smart.c
+timer.c                 modified        usleep_range()
+                                        msleep()
+                                        msleep_interruptible()
+sempahore.c             modified        down()
+                                        down_interruptible()
+                                        down_killable()
+                                        down_trylock()
+                                        down_timeout()
+                                        __mutex_lock_common()
+rwsem.c                 modified        down_read()
+                                        down_read_killable()
+                                        down_read_trylock()
+                                        down_write()
+                                        down_write_killable()
+                                        down_write_trylock ()
+mutex.c                 modified        mutex_lock()
+                                        mutex_lock_interruptible()
+                                        mutex_lock_killable()
+                                        mutex_trylock()
+                                        __down_common()
+rwsem-spinlock.c       modified         __down_read_common()
+                                        __down_write_common()
+smart.c                modified         place_entity()
+sched_init()           added            init_synch_point()      core.c
+smart.c                modified         init_synch_point()
+                                        synch_point()
 
 NOT USEFUL: // NOTE: USELESS
 -----------
@@ -48,7 +83,6 @@ trace_sched_stat_runtime()
 update_min_vruntime()
 max_vruntime()
 min_vruntime()
-entity_before()
 
 __pick_next_entity()
 __pick_last_entity()
@@ -61,39 +95,6 @@ place_entity()
 TODO:
 -----
 
-update_min_exec_runtime()       _> implement
-
-enqueue_entity()    -> Remove cfs stuff
-dequeue_entity()    -> Remove cfs stuff
-
-_sched_fork()       -> initialise sched_entity
-init_cfs_rq()       -> initialise AI
-
-usleep_range()          -> set attribute
-msleep()                -> set attribute
-msleep_interruptible()  -> set attribute
-
-down()                   -> set attribute
-up()                     -> set attribute
-
-pick_next_entity_smart()        -> set attribute
-
-pick_next_entity_smart()        -> update_curr()
-put_prev_entity()               -> update_curr()
-schedule_tick()                 -> update_curr()
-yield_task_fair()               -> update_curr()
-
-put_prev_task_fair()    -> What ??
-set_curr_task_fair()    -> What ??
-
-set_next_buddy()    -> What ??
-set_last_buddy()    -> What ??
-set_skip_buddy()    -> What ??
-
-yield_to_task_fair()    -> What ??
-check_preempt_wakeup()  -> What ?? Don't care
-
-task_fork_fair()
 
 QUESTION:
 - is curr on the runqueue, on_rq == 1 ????
