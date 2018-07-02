@@ -67,8 +67,17 @@ rwsem-spinlock.c       modified         __down_read_common()
                                         __down_write_common()
 smart.c                modified         place_entity()
 sched_init()           added            init_synch_point()      core.c
-smart.c                modified         init_synch_point()
+smart.c                added            init_synch_point()
                                         synch_point()
+smart.c                modified         wakeup_preempt_entity()
+                                        migrate_task_rq_smart()
+                                        check_preempt_tick()
+                                        wakeup_gran()
+                                        sched_slice()
+                                        sched_vslice()
+debugai.c              create
+smart.c                added            print_ai_stats()
+init/Kconfig            added           source "kernel/sched/Kconfig"
 
 NOT USEFUL: // NOTE: USELESS
 -----------
@@ -77,6 +86,7 @@ scale_load_down()       -> Used for fixed point
 __calc_delta_fair()
 __update_inv_weight()
 
+__sched_period()
 sched_vslice()
 trace_sched_stat_runtime()
 

@@ -1,3 +1,11 @@
+TIMESLICE
+=========
+sched_slice()                                           smart.c
+        __sched_period()                                smart.c
+
+Modified, return a constant timeslice CONFIG_SCHED_SFS_TIMESLICE no more
+          __sched_period()
+
 RQ INIT
 =======
 
@@ -45,9 +53,9 @@ activate_task()                                                 core.c
                         enqueue_entity()                        -> initialise vruntime of the process
                                 if curr -> normalize
                                 update_curr()
-                                if !state_used -> add_aistats()
                                 if !curr & !sleep -> normalize
-                                if !curr -> __enqueue_entity()
+                                if !state_used -> add_aistats()
+                                if !curr -> __enqueue_entity()     -> entity not in rq
                                 se->on_rq = 1
 
 Modified,
@@ -60,7 +68,7 @@ deactivate_task()                                               core.c
                 dequeue_task_smart()                            smart.c
                         dequeue_entity()
                                 update_curr()
-                                if !state_used -> remove_aistats()
+                                if !state_used -> remove_aistats()  -> entity still in rq
                                 if !curr -> __dequeue_entity()
                                 if !sleep -> Normalize state
                                 se->on_rq = 0
@@ -93,8 +101,19 @@ scheduler_tick()                                                core.c
                                 update_aistats()
                                 update_state()
                                 update_rewards()
+                        resched_curr()
 
-Modified, update the state of the entity and the runqueue
+hrtick_start_fair()                                             smart.c
+        sched_slice()
+        hrtick_start() -> start time slice                      core.c
+
+hrtick -> after finishing timeslice                             core.c
+        task_tick_smart()                                       smart.c
+
+
+
+Modified, update the state of the entity and the runqueue and set schedul
+          flag
 
 SELECT NEW PROCESS
 ==================
@@ -119,6 +138,8 @@ schedule()                                                      core.c
                                         _dequeue_entity()
 
 Modified, Calculate the utility of the next task and select it to run next
+
+/!\ When selecting new process, remove_aistats and add_aistats are not called
 
 SEMAPHORE and READ/WRITE SEM
 ============================
@@ -416,20 +437,207 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                         lock_count
 
         . place_entity()                        OK
-        . synchronization_point
-                TODO: evaluate the weight and stop learning
+        . Remove everythings with vruntime
+                check_spread()                  just for debug
+                        enqueue_entity()
+                        put_prev_entity()
+                check_preempt_tick()
+                        entity_tick()
+                migrate_task_rq_smart()         OK
+                wakeup_preempt_entity()         OK
+                        pick_next_entity()      TODO next, skip, last buddies
+                        check_preempt_wakeup()
+                vruntime_normalized()           OK
+                        detach_task_cfs_rq()
+                        attach_task_cfs_rq()
+                max_vruntime()                  OK
+                        update_min_vruntime()
+                        place_entity()
+                min_vruntime()                  OK
+                        update_min_vruntime()
+                        place_entity()
+                update_min_vruntime()           OK
+                        update_curr()
+                        dequeue_entity()
 
-        . Remove everythings with vruntime ...
+        . calc_delta_fair()                     OK useless
+                calculate the virtual delta time regarding the weight of the
+                entity
+        . check_preempt_tick()                  OK
+                Check if the process should be preempted if it has finished its
+                timeslice
 
-        . Set kconfig:
-                CONFIG_SCHED_SFS
-                CONFIG_SCHED_SFS_SYNCH
-                CONFIG_SCHED_SFS_FIXP_SHIFT
-                CONFIG_SCHED_SFS_ALPHA
-                CONFIG_SCHED_SFS_GAMMA
-                CONFIG_SCHED_SFS_W_AGV_LOAD
-                CONFIG_SCHED_SFS_W_AGV_BLOCK
-                CONFIG_SCHED_SFS_W_AGV_SLEEP
-                CONFIG_SCHED_SFS_W_AGV_SEM
+                TODO: need if scheduler_tick != timeslice
+
+        . Timeslice                             OK
+                no fixed timeslice-> calculated at runtime
+                between sysctl_sched_min_granularity and sysctl_sched_latency
+                                        750,000ns             6,000,000ns
+
+                __sched_period()
+                        determine a period in which each task runs once.
+                                if nr > 8
+                                        nr * 750,000ns
+                                else
+                                        6,000,000ns
+
+                . sched_slice()
+                        based on the period to run each process return by
+                        __sched_period(), split the time among the task
+                        regarding their load
+
+                        sched_vslice()          OK
+                        check_preempt_tick()    OK
+                        hrtick_start_fair()
+                        get_rr_interval_fair()
+
+                . sched_vslice()                        OK
+                        return the virtual timeslice of the entity
+                        place_entity()
+
+        . tick == CONFIG_HZ
+                - the tick to update the process is CONFIG_HZ (250 or 1000) or
+                is determine with high resolution timer with CONFIG_SCHED_HRTICK
+
+                In scheduler_tick, rescheduling is activated with check_preempt_tick()
+                which control is the entity has finished is timeslice.
+
+        . debug
+                https://lwn.net/Articles/365835/
+                https://elinux.org/Kernel_Debugging_Tips
+                https://www.slideshare.net/vh21/linux-kernel-tracing
+                https://opensourceforu.com/2011/04/kernel-debugging-using-kprobe-and-jprobe/
+                http://devarea.com/linux-kernel-development-creating-a-proc-file-and-interfacing-with-user-space/
+
+                dmesg -n 5       -> set log level loglevel < 5
+                dmesg -wH        -> follow file evolution
+                tail -f filename -> follow file evolution
+                watch cat ...
+
+                printk()       -> dmesg -wH
+                trace_printk() -> trace in a tracer file
+
+                kprob:
+                        kp.pre_handler = pre handler function
+                        kp.post_handler = post handler function
+                        kp.addr = function to debug
+                        register_kprobe();
+                        unregister_kprobe(&kp);
+
+                        NOTE: Still use printk
+
+                jprob:
+                        like kprob but the handler get the same argument than
+                        the function to debug to get the entry arguments
+
+                        jp.kp.addr = function to debug
+                        jp.entry = handler
+                        jprobe_return(); when returning from handler
+                        register_jprobe(&my_probe);
+                        unregister_jprobe(&my_probe);
+
+                Create Proc file:
+
+                        struct file_operations
+                                .read
+                                .write
+                                .open
+                        proc_create()
+                        proc_remove()
+
+                        rewrite sched/debug.c with a new proc for the AI
+
+                create new debug file ???
+                create a new trace    ???
+
+        . synchronization_point and batch                       OK
+                weight are global
+
+
+                QUESTION: is timer_list per-CPU? Yes
+                        https://lwn.net/Articles/22911/
+                        dynamic timer is bound to the CPU that activated it
+                QUESTION: is timer_list in interrupt context? Yes
+                QUESTION: is it possible to lock with timer_list? Yes
+                        read_lock_irq write_lock_irq
+                        DEFINE_RWLOCK(x)
+
+                QUESTION: batch methodes?
+                        average dw over each update fpor each CPU the batch
+
+        . Set kconfig:                                  OK
+                -> /init/Kconfig
+                -> kernel/sched/Kconfig
+                https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt
+                CONFIG_SCHED_SFS                n
+                CONFIG_SCHED_SFS_TIMESLICE      1000000ns
+                CONFIG_SCHED_SFS_SYNCH_TIMER    1000ms
+                CONFIG_SCHED_SFS_FIXP_SHIFT     10
+                CONFIG_SCHED_SFS_ALPHA          0
+                CONFIG_SCHED_SFS_GAMMA          0
+                CONFIG_SCHED_SFS_W_AGV_LOAD     0
+                CONFIG_SCHED_SFS_W_AGV_BLOCK    0
+                CONFIG_SCHED_SFS_W_AGV_SLEEP    0
+                CONFIG_SCHED_SFS_W_AGV_LOCK     0
 
                 NOTE: the constant should already be scaled to the fixedpoint
+
+        . entity_before() important to avoid any overflow       OK
+
+                - caller:
+                        __enqueue_entity
+                        pick_next_entity
+                        task_fork_fair
+
+                - update min_state in update_aistats()
+
+                        QUESTION: always minimum state in rq or current? no
+                                /!\ if state overflow
+
+                        remove_aistats  -> process in rq
+                        add_aistate     -> process not in rq
+                        update_ai_stats -> curr normaly not in rq
+
+                - when calculating, sub by min_state for all entity state:
+                        remove_aistats
+                                r -> problem because diff
+                                     but no need to subtract min_state
+                        add_aistats
+                                r -> problem because diff
+                                     but no need to subtract min_state
+                        update_rewards
+                                r_old, r -> problem because diff
+                                            but no need to subtract min_state
+                        update_next
+                                s, s2, si, si2 -> problem is state overflow
+                                                  and entity state not
+
+                To reduce the overhead of the calculation, reduce the overflow
+                when detected during the update of the runqueue state.
+
+                This required to have min always the real-min state
+
+        . Convergence                           OK
+        . Determine default weight
+
+                -> always load weight at the begining, only use it to keep
+                -> fair regarding the different process
+                -> other == 0
+
+                CONFIG_SCHED_SFS_SYNCH_TIMER
+                CONFIG_SCHED_SFS_FIXP_SHIFT
+                CONFIG_SCHED_SFS_ALPHA          -> 0.5
+                CONFIG_SCHED_SFS_GAMMA
+                CONFIG_SCHED_SFS_W_LOAD         1
+                CONFIG_SCHED_SFS_W_AGV_BLOCK    0
+                CONFIG_SCHED_SFS_W_AGV_SLEEP    0
+                CONFIG_SCHED_SFS_W_AGV_LOCK     0
+
+                 /* -20 */     88761,     71755,     56483,     46273,     36291,
+                 /* -15 */     29154,     23254,     18705,     14949,     11916,
+                 /* -10 */      9548,      7620,      6100,      4904,      3906,
+                 /*  -5 */      3121,      2501,      1991,      1586,      1277,
+                 /*   0 */      1024,       820,       655,       526,       423,
+                 /*   5 */       335,       272,       215,       172,       137,
+                 /*  10 */       110,        87,        70,        56,        45,
+                 /*  15 */        36,        29,        23,        18,        15,
