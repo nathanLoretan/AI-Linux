@@ -10,9 +10,9 @@ RQ INIT
 =======
 
 sched_init()                                            core.c
-        init_synch_point()
         for_each_possible_cpu() ->
                 init_cfs_rq()                           smart.c
+        init_synch_point()
 
 Modified, Initialize the different factors and weights used by the AI and
           initialize the list that store the entity
@@ -362,6 +362,7 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                         usleep_range()
                         msleep()
                         msleep_interruptible()
+                        yield_task_smart()
 
                 lock_count
                         down()                          -> semaphore.c  OK
@@ -575,7 +576,7 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 CONFIG_SCHED_SFS_FIXP_SHIFT     10
                 CONFIG_SCHED_SFS_ALPHA          0
                 CONFIG_SCHED_SFS_GAMMA          0
-                CONFIG_SCHED_SFS_W_AGV_LOAD     0
+                CONFIG_SCHED_SFS_W_LOAD         0
                 CONFIG_SCHED_SFS_W_AGV_BLOCK    0
                 CONFIG_SCHED_SFS_W_AGV_SLEEP    0
                 CONFIG_SCHED_SFS_W_AGV_LOCK     0
@@ -618,7 +619,7 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 This required to have min always the real-min state
 
         . Convergence                           OK
-        . Determine default weight
+        . Determine default weight              OK
 
                 -> always load weight at the begining, only use it to keep
                 -> fair regarding the different process
@@ -633,11 +634,120 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 CONFIG_SCHED_SFS_W_AGV_SLEEP    0
                 CONFIG_SCHED_SFS_W_AGV_LOCK     0
 
-                 /* -20 */     88761,     71755,     56483,     46273,     36291,
-                 /* -15 */     29154,     23254,     18705,     14949,     11916,
-                 /* -10 */      9548,      7620,      6100,      4904,      3906,
-                 /*  -5 */      3121,      2501,      1991,      1586,      1277,
-                 /*   0 */      1024,       820,       655,       526,       423,
-                 /*   5 */       335,       272,       215,       172,       137,
-                 /*  10 */       110,        87,        70,        56,        45,
-                 /*  15 */        36,        29,        23,        18,        15,
+        . migration task
+        https://www.systutorials.com/239971/migration-thread-works-inside-linux-kernel/
+
+                Task is called when stopping and migrating a task to another CPU.
+                Thereis one process per cpu.
+
+                The task is initialized during the early_initcall by calling the function
+                sched_set_stop_task().
+
+        . RSDTtXZPI                                     fs/proc/array.c
+                "R (running)",		/* 0x00 */
+        	"S (sleeping)",		/* 0x01 */    TASK_INTERRUPTIBLE
+        	"D (disk sleep)",	/* 0x02 */    TASK_UNINTERRUPTIBLE
+        	"T (stopped)",		/* 0x04 */
+        	"t (tracing stop)",	/* 0x08 */
+        	"X (dead)",		/* 0x10 */
+        	"Z (zombie)",		/* 0x20 */
+        	"P (parked)",		/* 0x40 */
+                "I (idle)",		/* 0x80 */
+
+        . set_last_buddy        -> when preempted
+        . set_next_buddy        -> when preempted
+        . set_skip_buddy        -> when yield
+
+        . QUESTION: When is a task in idle state ???
+                 TASK_IDLE -> I
+                        set_current_state(TASK_IDLE)
+                        __set_current_state(TASK_IDLE)
+                        prepare_to_wait(... TASK_IDLE)
+                        ___swait_event(... TASK_ILDE ...)
+                        ___wait_event(... TASK_ILDE ...)
+
+        . QUESTION: When is a task in sleep state other than blocked ???
+
+                TASK_UNINTERRUPTIBLE -> D
+
+                        prepare_to_wait_exclusive()                     wait.c
+                                __add_wait_queue_entry_tail()
+                                set_current_state()
+
+                        prepare_to_wait()                               wait.c
+                                __add_wait_queue_entry_tail()
+                                set_current_state()
+
+                        prepare_to_wait_event()                         wait.c
+                                __add_wait_queue_entry_tail()
+                                set_current_state()
+
+                        wait_on_bit
+                        wait_on_bit_timeout
+                        wait_on_bit_lock_io
+                                ...
+                                        prepare_to_wait_exclusive()
+                                        __add_wait_queue_entry_tail()
+
+                        ___swait_event
+                                prepare_to_swait_event
+                                        prepare_to_swait
+                                                __prepare_to_swait
+                                                        list_add
+
+                        ___wait_var_event
+                        ___wait_event
+                                prepare_to_wait_event()
+                                        __add_wait_queue_entry_tail()
+                                        __add_wait_queue()
+                                set_current_state()
+
+
+                        wait_for_common()                               completion.c
+                        wait_for_common_io()
+                        wait_for_completion
+                        wait_for_completion_timeout
+                                __wait_for_common()
+                                        do_wait_for_common()
+                                                __add_wait_queue_entry_tail_exclusive()
+                                        __set_current_state(state);
+
+                        wait_woken                                      wait.c
+                                set_current_state()
+                                schedule_timeout()
+
+                TASK_INTERRUPTIBLE -> S
+                        prepare_to_swait
+                        prepare_to_wait_exclusive
+                        prepare_to_wait
+                        set_current_state
+                        __set_current_state
+                        wait_woken
+                        wait_on_bit
+
+                schedule_timeout()
+                __add_wait_queue                                wait.h
+                __add_wait_queue_exclusive                      wait.h
+                __add_wait_queue_entry_tail                     wait.h
+                __add_wait_queue_entry_tail_exclusive           wait.h
+
+                TODO: Wait signal pending ...
+
+                If task always waiting, the execution avg. time will be reduce and
+                will influence the decision, no necessarily needed to add sleep and wait.
+
+
+https://idea.popcount.org/2012-12-11-linux-process-states/
+https://elixir.bootlin.com/linux/v4.17.2/source/include/linux/sched.h#L92
+Debugging:
+
+
+  	printk("Debug=========================================================\n");
+  	printk("Process: %s\n", p->comm);
+  	printk("Debug=========================================================\n");
+
+        #include <linux/sched/ai.h>
+
+        #ifdef CONFIG_SCHED_SFS
+        	ai_inc(current->se.aistats.sleep_count);
+        #endif

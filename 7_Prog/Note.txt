@@ -253,3 +253,46 @@ sudo make INSTALL_PATH=./boot install
 Run Qemu
 --------
 qemu-system-x86_64 -kernel bzImage -initrd initrd.img-4.16.11 -m 512M
+
+
+--------------------------------------------------------------------------------
+Install Kernel:
+
+-> copy config:
+        cp /boot/config-$(uname -r) .config
+        make menuconfig
+        make
+        make modules_install
+        make install
+                copy kernel and .config file to the /boot folder
+        update-initramfs        -c -k x.x.x
+                indicate to use the new kernel x.x.x
+        update_grub
+
+NOTE: option -j n allow to split the compilation on n cores
+
+linux distribution:
+        - slackware
+        - fedora
+        - ubuntu
+
+QEMU:
+http://mgalgs.github.io/2015/05/16/how-to-build-a-custom-linux-kernel-for-qemu-2015-edition.html
+https://nostillsearching.wordpress.com/2012/09/22/compiling-linux-kernel-and-running-it-using-qemu/
+
+cd .../linux-x.x.x/arch/i386/boot
+mkinitramfs -o initrd.img-x.x.x
+qemu-system-i386 -kernel bzImage -initrd initrd.img-x.x.x -m 512M
+
+qemu-img create mydisk.img 10G
+qemu-system-x86_64 -boot d -cdrom image.iso -m 512 -hda mydisk.img
+                                                |          |
+                                           Use 512M RAM    |
+                                                Use image of 10G hard disk
+
+mkinitramfs -o initrd.img-4.17.2
+qemu-system-x86_64 -kernel AI-linux/arch/x86_64/boot/bzImage -initrd \
+initrd.igm-4.17.2 -m 512M -nographic -append 'console=ttyS0' -serial mon:stdio
+
+Create ISO:
+mkisofs -o destination-filename.iso /home/username/folder-name

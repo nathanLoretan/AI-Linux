@@ -75,9 +75,27 @@ smart.c                modified         wakeup_preempt_entity()
                                         wakeup_gran()
                                         sched_slice()
                                         sched_vslice()
-debugai.c              create
+debug_ai.c             create
 smart.c                added            print_ai_stats()
-init/Kconfig            added           source "kernel/sched/Kconfig"
+init/Kconfig           added           source "kernel/sched/Kconfig"
+sched/Makefile         modified
+include/linux/sched/ai.h added          ai_inc()
+                                        ai_dec()
+                                        ai_add()
+                                        ai_sub()
+                                        ai_set()
+debug.c                modified         print_cfs_rq()
+topology.c             added            schedai_debug_setup()
+                                        schedai_debug()
+init/main.c            added            init_synch_point()
+core.c                 modfied          __sched_fork()
+core.c                 modified        sched_set_stop_task
+wait.h                 modified         __add_wait_queue()
+                                        __add_wait_queue_exclusive()
+                                        __add_wait_queue_entry_tail()
+                                        __add_wait_queue_entry_tail_exclusive()
+swait.c                modified         __prepare_to_swait
+timer.c                 modified        schedule_timeout
 
 NOT USEFUL: // NOTE: USELESS
 -----------
