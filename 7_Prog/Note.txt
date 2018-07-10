@@ -256,7 +256,10 @@ qemu-system-x86_64 -kernel bzImage -initrd initrd.img-4.16.11 -m 512M
 
 
 --------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 Install Kernel:
+===============
 
 -> copy config:
         cp /boot/config-$(uname -r) .config
@@ -272,27 +275,109 @@ Install Kernel:
 NOTE: option -j n allow to split the compilation on n cores
 
 linux distribution:
+===================
         - slackware
         - fedora
         - ubuntu
 
 QEMU:
+=====
 http://mgalgs.github.io/2015/05/16/how-to-build-a-custom-linux-kernel-for-qemu-2015-edition.html
 https://nostillsearching.wordpress.com/2012/09/22/compiling-linux-kernel-and-running-it-using-qemu/
 
-cd .../linux-x.x.x/arch/i386/boot
-mkinitramfs -o initrd.img-x.x.x
-qemu-system-i386 -kernel bzImage -initrd initrd.img-x.x.x -m 512M
+Run Kernel:
+        mkinitramfs -o initrd.img-x.x.x
+        qemu-system-i386 -kernel bzImage -initrd initrd.img-x.x.x -m 512M
 
-qemu-img create mydisk.img 10G
-qemu-system-x86_64 -boot d -cdrom image.iso -m 512 -hda mydisk.img
-                                                |          |
-                                           Use 512M RAM    |
-                                                Use image of 10G hard disk
+Run ISO:
+        qemu-img create mydisk.img 10G
+        qemu-system-x86_64 -boot d -cdrom image.iso -m 512 -hda mydisk.img
+                                                        |          |
+                                                   Use 512M RAM    |
+                                                        Use image of 10G hard disk
 
 mkinitramfs -o initrd.img-4.17.2
 qemu-system-x86_64 -kernel AI-linux/arch/x86_64/boot/bzImage -initrd \
 initrd.igm-4.17.2 -m 512M -nographic -append 'console=ttyS0' -serial mon:stdio
 
 Create ISO:
+===========
 mkisofs -o destination-filename.iso /home/username/folder-name
+
+Fedora:
+=======
+https://fedoraproject.org/wiki/How_to_use_qemu
+https://fedoraproject.org/wiki/LiveOS_image
+
+Fedora:
+        -> LiveOS
+                -> squashfs.img
+
+squashfs.img:
+        -> LiveOS
+                -> rootfs.img
+
+rootfs.img:
+        -> bin
+        -> boot
+        -> usr
+        -> ...
+
+
+        sudo mount -o loop /dev/sdc1 /mnt/iso
+        sudo mount -o loop /mnt/iso/LiveOS/squashfs.img /mnt/LiveOS
+        sudo mount /mnt/LiveOS/LiveOS/rootfs.img /mnt/FedRoot/
+
+        chroot /mnt/FedRoot
+
+0. Install on USB
+
+        sudo dd if=Fedora-Workstation-Live-x86_64-28-1.1.iso of=/dev/sdc1 bs=4M && sync
+
+        [dd] command copies a file, converting the format of the data in the
+        process, according to the operands specified.
+
+        [sync] synchronizes data on disk with memory
+
+1. Run with Qemu
+
+        qemu-img create mydisk.img 10G
+        qemu-system-x86_64 -boot d -cdrom image.iso -m 512 -hda mydisk.img
+
+        or for cdrom
+
+        qemu -cdrom /dev/cdrom -hda mydisk.img -boot d -net nic -net user -m 196 -localtime
+
+        or for usb
+
+        sudo qemu-system-x86_64 -usb -usbdevice disk:/dev/sdc
+
+        ------
+
+        sudo qemu-system-x86_64 -cdrom Fedora-Workstation-Live-x86_64-28-1.1.iso \
+        -hda fedora-disk.img -drive file=fedora-disk.img,format=raw -boot d \
+        -net nic -net user -m 512 -localtime
+
+2. Load a new OS
+
+        sudo mkdir /mnt/iso
+        sudo mount -o loop my.iso /mnt/iso
+        ls /mnt/iso/
+
+        mv /path/to/kernel /mnt/iso/kernel
+
+        chroot /path/to/distribution
+
+        cp /boot/config-$(uname -r) .config
+        make menuconfig
+        make
+        make modules_install
+        make install
+                copy kernel and .config file to the /boot folder
+        update-initramfs        -c -k x.x.x
+                indicate to use the new kernel x.x.x
+        update_grub
+
+
+https://www.google.com/search?client=ubuntu&channel=fs&q=linux+unpack+iso+on+usb&ie=utf-8&oe=utf-8
+http://linuxforever.info/2017/06/16/write-image-iso-file-to-usb-with-command-line-in-linux-mint-ubuntu/

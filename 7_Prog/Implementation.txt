@@ -625,10 +625,10 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 -> fair regarding the different process
                 -> other == 0
 
-                CONFIG_SCHED_SFS_SYNCH_TIMER
-                CONFIG_SCHED_SFS_FIXP_SHIFT
-                CONFIG_SCHED_SFS_ALPHA          -> 0.5
-                CONFIG_SCHED_SFS_GAMMA
+                CONFIG_SCHED_SFS_SYNCH_TIMER    1000
+                CONFIG_SCHED_SFS_FIXP_SHIFT     10
+                CONFIG_SCHED_SFS_ALPHA          -> 0.5     512
+                CONFIG_SCHED_SFS_GAMMA          -> 0.8     820
                 CONFIG_SCHED_SFS_W_LOAD         1
                 CONFIG_SCHED_SFS_W_AGV_BLOCK    0
                 CONFIG_SCHED_SFS_W_AGV_SLEEP    0
@@ -736,11 +736,15 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 If task always waiting, the execution avg. time will be reduce and
                 will influence the decision, no necessarily needed to add sleep and wait.
 
+                ------------------
+                . Save a specific load with the right shift in the aistats
+
 
 https://idea.popcount.org/2012-12-11-linux-process-states/
 https://elixir.bootlin.com/linux/v4.17.2/source/include/linux/sched.h#L92
 Debugging:
 
+        - rescale, Q, dQ, State, Rewards
 
   	printk("Debug=========================================================\n");
   	printk("Process: %s\n", p->comm);
@@ -751,3 +755,87 @@ Debugging:
         #ifdef CONFIG_SCHED_SFS
         	ai_inc(current->se.aistats.sleep_count);
         #endif
+
+Scaled or not scaled, That is the question:
+
+        aistats:
+        --------
+        u64 scheduled_count     -> not
+
+        u64 state               -> reduced
+        u64 old_state;          -> reduced
+
+        u64 avg_runtime;        -> reduced
+        u64 runtime_sum;        -> reduced
+
+        u64 avg_block;          -> scaled
+        u64 block_count;        -> not
+
+        u64 avg_sleep;          -> scaled
+        u64 sleep_count;        -> not
+
+        u64 avg_lock;           -> scaled
+        u64 lock_count;         -> not
+
+        u64 di;                 -> NOT USED !!!
+        s64 ut;                 -> scaled
+        s64 targ;               -> scaled
+        s64 q_value;            -> scaled
+
+        ai:
+        ---
+        s64 dw_load;            -> scaled
+        s64 dw_avg_block;       -> scaled
+        s64 dw_avg_sleep;       -> scaled
+        s64 dw_avg_lock;        -> scaled
+        u64 batch_cnt;
+
+        u64 state;              -> reduced
+        u64 min_state;          -> reduced
+
+        s64 q_value;            -> scaled
+        s64 dq_value;           -> scaled
+        s64 old_q_value;        -> scaled
+
+        s64 ut_sum;             -> scaled
+
+        s64 rewards;            -> scaled and reduced
+
+        update_rewards():
+        -----------------
+        s64 dij                 -> not
+        s64 dij2                -> not
+        s64 rewards;            -> not
+        u64 min_state;          -> not
+
+        update_next():
+        --------------
+        s64 s                   -> scaled       based on ai->state
+        s64 s2                  -> scaled       based on ai->state + avg_runtime
+        s64 si                  -> scaled       based on aistats->state
+        s64 si2                 -> scaled       based on aistats->state + avg_runtime
+        s64 fi_s                -> scaled       based on targ, s and si
+        s64 fi_s2               -> scaled       based on targ, s2 and si2
+
+        update_dq(): -> same than for update_next()
+        ------------
+        s64 s                   -> scaled
+        s64 s2                  -> scaled
+        s64 si                  -> scaled
+        s64 si2;                -> scaled
+        s64 fi_s                -> scaled
+        s64 fi_s2;              -> scaled
+
+        update_weights():
+        -----------------
+        s64 update              -> scaled       based on alpha dq_value rewards
+                                                         old_q_value gamma
+                                                         q_value
+
+        synch_point():
+        --------------
+        dw_load                 -> scaled
+        dw_avg_block            -> scaled
+        dw_avg_sleep            -> scaled
+        dw_avg_lock             -> scaled
+        cpu_cnt                 -> not
