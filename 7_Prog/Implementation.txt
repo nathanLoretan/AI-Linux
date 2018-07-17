@@ -731,13 +731,14 @@ TODO:   . Initialize AI in runqueue                    -> init_cfs_rq()         
                 __add_wait_queue_entry_tail                     wait.h
                 __add_wait_queue_entry_tail_exclusive           wait.h
 
-                TODO: Wait signal pending ...
-
                 If task always waiting, the execution avg. time will be reduce and
                 will influence the decision, no necessarily needed to add sleep and wait.
 
-                ------------------
+                =========================================================================
+                TODO:
                 . Save a specific load with the right shift in the aistats
+                . rename dq_value and update
+                . use the prev load, sleep avg, block avg, lock avg
 
 
 https://idea.popcount.org/2012-12-11-linux-process-states/
@@ -839,3 +840,310 @@ Scaled or not scaled, That is the question:
         dw_avg_sleep            -> scaled
         dw_avg_lock             -> scaled
         cpu_cnt                 -> not
+
+
+================================================================================
+================================================================================
+================================================================================
+================================================================================
+https://www.systutorials.com/240717/load-balancing-work-internal-operating-systems/
+
+TRIGGER BALANCE:
+================
+scheduler_tick()                                                core.c
+        trigger_load_balance()                                  fair.c
+                if (time_after_eq(jiffies, rq->next_balance))
+                        raise_softirq(SCHED_SOFTIRQ)            softirq.c
+
+SCHEDULE NEXT BALANCE: TODO
+======================
+update_next_balance()
+        get_sd_balance_interval(sd, 0)
+
+CALLBACK:
+=========
+init_sched_fair_class()                                         fair.c
+        open_softirq(SCHED_SOFTIRQ, run_rebalance_domains)      softirq.c
+
+NOTE: The callback function of SCHED_SOFTIRQ is run_rebalance_domains()
+
+REBALANCE:
+==========
+run_rebalance_domains()                                         fair.c
+        update_blocked_averages()
+                update_cfs_rq_load_avg()        IF CONFIG_FAIR_GROUP_SCHED
+                for_each_leaf_cfs_rq_safe()     ELSE
+                        update_load_avg()
+        rebalance_domains()
+                for_each_domain(cpu, sd)
+                        load_balance()
+                        sd->last_balance = jiffies
+                        interval = sd->balance_interval
+                        next_balance = sd->last_balance + interval
+
+LOAD_BALANCE:
+=============
+load_balance()                                                  fair.c
+        should_we_balance()
+        find_the_busiest_group()
+        find_the_busiest_queue()
+        number to try to move: min(sysctl_sched_nr_migrate, nr_running)
+        detach_tasks()
+                while cfs_tasks not empty
+                        list_last_entry(cfs_tasks)       QUESTION: Where deleted from cfs_task
+                        can_migrate_task()
+                        detach_task()
+                                deactivate_task()
+                                        ...
+                                        dequeue_entity()
+                                                account_entity_dequeue()
+                                                        list_del_init(&se->group_node)
+                        list_last_entry(env->tasks)
+        attach_tasks()
+                while env->tasks not empty
+                        list_last_entry(env->tasks)
+                        list_del_init()
+                        attach_task()
+                                activate_task()
+                                        ...
+                                        enqueue_entity()
+                                                account_entity_enqueue()
+                                                        list_add(&se->group_node, &rq->cfs_tasks)
+
+NOTE: sysctl_sched_nr_migrate = 32
+
+UPDATE LOAD AVG SE:
+===================
+ update_load_avg()                                                     faire.c
+        __update_load_avg_se()
+                ___update_load_sum()
+                ___update_load_avg()
+        update_cfs_rq_load_avg()
+                __update_load_avg_cfs_rq()
+                        ___update_load_sum()
+                        ___update_load_avg()
+        propagate_entity_load_avg()
+        update_tg_load_avg()
+
+NOTE: tg -> Task group
+NOTE: Called by enqueue_entity
+                dequeue_entity
+                dequeue_task_fair
+                enqueue_task_fair
+                put_prev_entity
+                set_next_entity
+                entity_tick
+                attach_entity_cfs_rq
+                detach_entity_cfs_rq
+                sched_group_set_shares
+                propagate_entity_cfs_rq
+                update_blocked_averages
+
+FIND_BUSIEST_GROUP: TODO: Select which of those condition should be kept
+===================
+find_busiest_group()                                                    fair.c
+        update_sd_lb_stats()
+                do {
+                        sg = sg->next;
+                } while (sg != env->sd->groups);
+
+        check_asym_packing()
+
+        no balance if no busiest or busiest nr_running == 0     -> out balance  KEEP
+        calculate domain avg load scaled to capacity
+        check if group considered to be imbalanced              -> force balance
+        if this cpu is ilde and busiest no capacity             -> force balance
+        no balance if this cpu more load that busiest found     -> out balance
+        no balance if this cpu above domain average weight      -> balance
+        if this cpu idle
+                if no imbalance                                 -> out balanced
+
+        force_balance
+                calculate_imbalance()
+                return busiest
+        out_balance
+                env_imbalance = 0
+
+
+FIND_BUSIEST_QUEUE:
+===================
+find_busiest_queue()                                                    fair.c
+        for_each_cpu_and()
+                get cpu rq
+                get classify (all, regular, remote)
+                get capactiy = cpu->cpu_capacity
+                weighted_cpuload()
+                        cfs_rq_runnable_load_avg()
+                                cfs_rq->avg.runnable_load_avg
+                select it if:
+                        nr_running > 1
+                        wl > env->imbalance
+                        check_cpu_capacity()
+
+                compare with previous busiest found, keep the best
+
+QUESTION: env->imbalance, calculate_imbalance, It is use somewhere else than find_busiest_queue
+QUESTION: sd->imbalance_pct
+QUESTION: Relation group, runqueue
+
+NOTE: group_type = group_classify()
+NOTE: sd = sched domain, tg = task group, ld = load balance
+NOTE: cpu_capacity = SCHED_CAPACITY_SCALE = (1L << SCHED_CAPACITY_SHIFT)
+NOTE: SCHED_CAPACITY_SHIFT = SCHED_FIXEDPOINT_SHIFT
+NOTE: update_cpu_capacity() -> cpu_rq(cpu)->cpu_capacity
+
+        . Attributes (rename weight for load balance):                           TODO
+                Per Entity:
+                - avg runtime                                   OK
+                - nbr of time scheduled, avg                    avg_sched, interval_cnt->jiffies
+                - nbr blocked                                   OK
+                - avg time of completion without blocking       avg_comp, comp_count
+                - IPC                                           if possible
+                - Cache miss                                    if possible
+
+                Per Runqueue:
+                - avg runtime                                   sum     avg_runtime_sum
+                - nbr of time scheduled, avg                    sum     avg_sched_sum
+                - nbr blocked                                   sum     avg_block_sum
+                - avg time of completion without blocking       sum     avg_comp_sum
+
+                ----
+                u64 prev_avg_runtime    -> per task     scaled     ok
+                u64 prev_avg_sched      -> per task     scaled     ok
+                u64 prev_avg_block      -> per task     scaled     ok
+                u64 prev_avg_comp       -> per task     scaled     ok
+
+                u64 avg_runtime_sb      -> per task     scaled     ok
+                u64 avg_sched           -> per task     scaled     ok
+                u64 avg_block           -> per task     scaled     ok
+                u64 avg_comp            -> per task     scaled     ok
+
+                u64 last_interval       -> per task     not        ok
+                u64 interval_count      -> per task     not        ok
+                u64 comp_count          -> per task     not        ok
+                u64 prev_block_count    -> per task     not        ok
+
+                u64 avg_runtime_sum     -> per task     scaled     ok
+                u64 avg_sched_sum       -> per task     scaled     ok
+                u64 avg_block_sum       -> per task     scaled     ok
+                u64 avg_comp_sum        -> per task     scaled     ok
+
+                s64 balance             -> per task     scaled     ok
+                                        -> per queue    scaled     ok
+
+                s64 sb_dw_avg_runtime   -> per queue    scaled     ok
+                s64 sb_dw_avg_sched     -> per queue    scaled     ok
+                s64 sb_dw_avg_block     -> per queue    scaled     ok
+                s64 sb_dw_avg_comp      -> per queue    scaled     ok
+
+                u64 sb_batch_cnt        -> per queue    not        ok
+
+                s64 sb_q_value          -> per task     scaled     ok
+                s64 sb_old_q_value      -> per task     scaled     ok
+
+                bool sb_learning        -> per queue    not        ok
+                bool sb_dirty_weight    -> per queue    not        ok
+                bool moved              -> per task     not        ok
+
+                s64 sb_rewards          -> per task     scaled     ok
+
+                s64 sb_w_avg_sched      -> global       scaled     ok
+                s64 sb_w_avg_runtime    -> global       scaled     ok
+                s64 sb_w_avg_block      -> global       scaled     ok
+                s64 sb_w_avg_comp       -> global       scaled     ok
+
+                u64 sb_conv_limit       -> global       not        ok
+                u64 sb_conv_runtime     -> global       not        ok
+                u64 sb_conv_sched       -> global       not        ok
+                u64 sb_conv_block       -> global       not        ok
+                u64 sb_conv_comp        -> global       not        ok
+
+                s64 sb_alpha            -> global       scaled     ok
+                s64 sb_gamma            -> global       scaled     ok
+                ----
+
+                The attributes are updated by:
+                . update_curr()                                                 ok
+                . enqueue_entity()                                              ok
+                . dequeue_entity()                                              ok
+                . init_aistats()                                                OK
+                . init_ai()                                                     OK
+                . detach_task_cfs_rq                                            ok
+                . attach_task_cfs_rq                                            ok
+
+
+        . load_balance()                                                        ok
+                - Considering state of queue and entity up to date
+
+                1. select queue with the worst state TODO: Group, queue
+                        - group -> sum state of queue
+                2. Calculate Q(s,a) for each entity and decide to move or not
+                3. calculate dQ
+                4. Update with rewards at the next load balance
+                5. rewards:
+                        - save info in entity
+                        - raised a flag moved in the entity
+                        - at next balanced in the new cpu
+                                . calculate the rewards
+                                . update dw
+                                . reset moved flag
+
+                NOTE: Using batch make no different if weight updated on new
+                      CPU or old one.
+
+                      rq->cfs_task
+
+                QUESTION: How to determine process that called load balance ??
+                        -> trigger_load_balance() is run periodically on each CPU
+                        through scheduler_tick()
+
+        . update_balance_rewards                                                OK
+        . update_balance_group                                                  OK
+        . update_balance_weight                                                 OK
+        . detach_tasks()                                                        OK
+                . when balance <= 0 what to do ?
+                        -> balance = q_value -> nothing to do. stop only if
+                           no more task
+                . consider affinity -> can't move the task                      OK
+        . attach_tasks()                                                        OK
+                -> no modification
+
+        . Snychronization for balance                                           OK
+                -> dirty weight
+        . init task                                                             ok
+        . init queue                                                            ok
+        . debug                                                                 ok
+        . Makefile                                                              ok
+        . Signed-unsigned                                                       TODO
+        . Check scale of local variable                                         TODO
+        . balance interval                                                      TODO
+        . Default weight: SB (Smart Balance)                                    TODO
+
+                -> dependent of CONFIG_SCHED_SFS
+                CONFIG_SCHED_SB
+                CONFIG_SCHED_SB_SYNCH_TIMER
+                CONFIG_SCHED_SB_FIXP_SHIFT
+                CONFIG_SCHED_SB_CONV
+                CONFIG_SCHED_SB_ALPHA
+                CONFIG_SCHED_SB_GAMMA
+                CONFIG_SCHED_SB_ALPHA
+                CONFIG_SCHED_SB_GAMMA
+                CONFIG_SCHED_SB_W_...
+                CONFIG_SCHED_SB_INTERVAL -> ms
+        . remove useless stuff
+
+/!\: mark task TASK_ON_RQ_MIGRATING
+
+active_balance will be set to wake up Migration Thread on the source CPU
+
+Useless
+        should_we_balance
+        find_busiest_group
+        find_busiest_queue
+
+????
+        fbd_classify_rq
+        get_sd_load_idx
+        SD_PREFER_SIBLING
+        task_h_load
+        sched_feat

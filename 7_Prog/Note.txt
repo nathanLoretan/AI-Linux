@@ -1,3 +1,8 @@
+PATCH:::
+diff -uNr linux-4.17.2/ AI-linux/ > save_17.07.18.patch
+
+
+
 https://elixir.bootlin.com/linux/v4.17.2/ident
 https://books.google.co.uk/books?id=uxhKDwAAQBAJ&pg=PA240&lpg=PA240&dq=linux+how+kernel+mutex+push+task+to+sleep&source=bl&ots=GFPzx6_c0J&sig=NraggxWPYnDpMZbtAMqWYn129ug&hl=en&sa=X&ved=0ahUKEwivkOfTgu_bAhVFCuwKHTZUC4QQ6AEIPjAB#v=onepage&q=linux%20how%20kernel%20mutex%20push%20task%20to%20sleep&f=false
 
@@ -300,6 +305,8 @@ mkinitramfs -o initrd.img-4.17.2
 qemu-system-x86_64 -kernel AI-linux/arch/x86_64/boot/bzImage -initrd \
 initrd.igm-4.17.2 -m 512M -nographic -append 'console=ttyS0' -serial mon:stdio
 
+add -smp n to give n core to the qemu system.
+
 Create ISO:
 ===========
 mkisofs -o destination-filename.iso /home/username/folder-name
@@ -308,6 +315,7 @@ Fedora:
 =======
 https://fedoraproject.org/wiki/How_to_use_qemu
 https://fedoraproject.org/wiki/LiveOS_image
+https://help.ubuntu.com/community/Installation/FromImgFiles/
 
 Fedora:
         -> LiveOS
@@ -329,6 +337,8 @@ rootfs.img:
         sudo mount /mnt/LiveOS/LiveOS/rootfs.img /mnt/FedRoot/
 
         chroot /mnt/FedRoot
+
+        NOTE: The file must be mount in a way that they can be writable
 
 0. Install on USB
 
