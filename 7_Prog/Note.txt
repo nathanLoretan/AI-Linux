@@ -1,6 +1,9 @@
 PATCH:::
 diff -uNr linux-4.17.2/ AI-linux/ > save_17.07.18.patch
+tar -jcf patch.tar.bzip2 save_23.07.18.patch
 
+
+https://www.slideshare.net/shimosawa/linux-initialization-process-2
 
 
 https://elixir.bootlin.com/linux/v4.17.2/ident

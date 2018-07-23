@@ -1,3 +1,13 @@
+Rename qvalue_old to qvalue and qvalue to qvalue2
+Alpha reduce with time ??? -> not necessarily because test convergence
+Use general fixed point not the other one ???
+Why SFS Q no more negatif ???
+Check were to do update_min_state???
+
+================================================================================
+================================================================================
+================================================================================
+
 TIMESLICE
 =========
 sched_slice()                                           smart.c
@@ -54,7 +64,7 @@ activate_task()                                                 core.c
                                 if curr -> normalize
                                 update_curr()
                                 if !curr & !sleep -> normalize
-                                if !state_used -> add_aistats()
+                                if !state_used -> add_aistats() NOTE: Done in __enqueue_entity
                                 if !curr -> __enqueue_entity()     -> entity not in rq
                                 se->on_rq = 1
 
@@ -68,7 +78,7 @@ deactivate_task()                                               core.c
                 dequeue_task_smart()                            smart.c
                         dequeue_entity()
                                 update_curr()
-                                if !state_used -> remove_aistats()  -> entity still in rq
+                                if !state_used -> remove_aistats()  -> entity still in rq NOTE: Done in __dequeue_entity
                                 if !curr -> __dequeue_entity()
                                 if !sleep -> Normalize state
                                 se->on_rq = 0
@@ -124,9 +134,10 @@ schedule()                                                      core.c
         __schedule()
                 pick_next_task()
                         pick_next_task_smart()                  smart.c
+                                update_weights()
                                 if curr->on_rq -> update_curr()
+                                else curr = NULL
                                 pick_next_entity()
-                                        update_weights()
                                         update_next()
 
                 		put_prev_entity()
@@ -326,6 +337,16 @@ set_curr_task_fair()                                    smart.c
 Modified, None
 
 -------
+
+DETACH/ATTACH_TASK_CFS_RQ
+==========================
+detach_task_cfs_rq()
+        detach_entity_cfs_rq
+                update_load_avg()
+                detach_entity_load_avg()
+                update_tg_load_avg()
+                propagate_entity_cfs_rq()
+
 
 static void remove_aistats(struct cfs_rq *cfs_rq, struct sched_entity *old)
 static void add_aistats(struct cfs_rq *cfs_rq, struct sched_entity *new)
@@ -898,6 +919,7 @@ load_balance()                                                  fair.c
                                         dequeue_entity()
                                                 account_entity_dequeue()
                                                         list_del_init(&se->group_node)
+                                set_task_cpu(p, env->dst_cpu);
                         list_last_entry(env->tasks)
         attach_tasks()
                 while env->tasks not empty
@@ -981,6 +1003,20 @@ find_busiest_queue()                                                    fair.c
                         check_cpu_capacity()
 
                 compare with previous busiest found, keep the best
+
+KTHREAD CREATE:
+===============
+kthread_create
+        kthread_create_on_node
+               __kthread_create_on_node
+
+smpboot_register_percpu_thread_cpumask
+        __smpboot_create_thread
+                 kthread_create_on_cpu
+                         kthread_create_on_node
+                                __kthread_create_on_node
+
+
 
 QUESTION: env->imbalance, calculate_imbalance, It is use somewhere else than find_busiest_queue
 QUESTION: sd->imbalance_pct
@@ -1114,27 +1150,62 @@ NOTE: update_cpu_capacity() -> cpu_rq(cpu)->cpu_capacity
         . init queue                                                            ok
         . debug                                                                 ok
         . Makefile                                                              ok
+        . scale Q                                                               ok
+        . move state used from enqueu/dequeu_entity to __enqueue/dequeue_entity ok
+                and removed from detach/attach_task_cfs_rq
         . Signed-unsigned                                                       TODO
         . Check scale of local variable                                         TODO
         . balance interval                                                      TODO
         . Default weight: SB (Smart Balance)                                    TODO
 
                 -> dependent of CONFIG_SCHED_SFS
-                CONFIG_SCHED_SB
-                CONFIG_SCHED_SB_SYNCH_TIMER
-                CONFIG_SCHED_SB_FIXP_SHIFT
-                CONFIG_SCHED_SB_CONV
-                CONFIG_SCHED_SB_ALPHA
-                CONFIG_SCHED_SB_GAMMA
-                CONFIG_SCHED_SB_ALPHA
-                CONFIG_SCHED_SB_GAMMA
-                CONFIG_SCHED_SB_W_...
-                CONFIG_SCHED_SB_INTERVAL -> ms
+                CONFIG_SCHED_SB                 1
+                CONFIG_SCHED_SB_SYNCH_TIMER     10000           -> 10s
+                CONFIG_SCHED_SB_FIXP_SHIFT      use SFS
+                CONFIG_SCHED_SB_CONV            1024
+                CONFIG_SCHED_SB_ALPHA           512
+                CONFIG_SCHED_SB_GAMMA           820
+
+                CONFIG_SCHED_SB_W_AVG_RUN       -1024
+                CONFIG_SCHED_SB_W_AVG_BLOCK     -1024
+                CONFIG_SCHED_SB_W_AVG_SCHED     -1024
+                CONFIG_SCHED_SB_W_AVG_COMP      -1024
+
+                CONFIG_SCHED_SB_INTERVAL        1000
+
         . remove useless stuff
 
-/!\: mark task TASK_ON_RQ_MIGRATING
+Debug:
+        . comp and sched -> use a global interval per cfs not entity
+                - comp -> on interval but update in pick_next_entity -> other update plenty of time
+                - sched -> use interval regarding rq
+        . balance positive
+                /!\, detach/attach_task update the average in enqueue/dequeue_entity
+                BUT it is already done in detach_task
+        . sum not equal to the actual value -> because task sleeping and previous udpate use them
+        . problem: e.g init -> if sleeping, attribute should no more be used
+        . update to big -> reduct attributes, scale sum and average             TODO
+        . average: value of src wrong, queue always bigger than debug           OK
+                -> busiest queue unlock between attach and detach
+        . state correct -> nope                                                 TODO
+                - same entity? ksoftirqd/1 cpuhp/1
+                - same problem than for migration task
+                        cpuhp/1 ksoftirqd/1 kworker/1:0 kworker/1:0H rcu_sched
 
-active_balance will be set to wake up Migration Thread on the source CPU
+                        kthread_create -> TODO BUt still not this
+
+                update_aistats          KO
+                enqueue_entity          OK
+                dequeue_entity          OK
+                migrate_task_rq_smart   OK
+                task_fork_smart         OK
+
+                update_aistats + migrate_task_rq_smart  KO ???????
+                update_aistats + dequeue_entity         KO ??? -> state_used=false misplaced
+
+                /!\ IF IN UPDATE_CURR()
+
+                migrate_task_rq_smart -> consider min_state = min(min_state, se->aistats.state);
 
 Useless
         should_we_balance
@@ -1147,3 +1218,148 @@ Useless
         SD_PREFER_SIBLING
         task_h_load
         sched_feat
+
+
+        balance value with learning
+REDUCT_BALANCE
+
+
+
+
+        warning: TCG doesn't support requested feature: CPUID.01H:ECX.vmx [bit 5]
+        warning: TCG doesn't support requested feature: CPUID.01H:ECX.vmx [bit 5]
+        [    0.000000] Linux version 4.17.2 (nathan@nathan) (gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.10)) #514 SMP Mon Jul 23 08:58:07 BST 2018
+        [    0.000000] Command line: console=ttyS0
+        [    0.000000] x86/fpu: x87 FPU will use FXSAVE
+        [    0.000000] e820: BIOS-provided physical RAM map:
+        [    0.000000] BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+        [    0.000000] BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+        [    0.000000] BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+        [    0.000000] BIOS-e820: [mem 0x0000000000100000-0x000000001ffdffff] usable
+        [    0.000000] BIOS-e820: [mem 0x000000001ffe0000-0x000000001fffffff] reserved
+        [    0.000000] BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+        [    0.000000] NX (Execute Disable) protection: active
+        [    0.000000] SMBIOS 2.8 present.
+        [    0.000000] DMI: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Ubuntu-1.8.2-1ubuntu1 04/01/2014
+        [    0.000000] e820: last_pfn = 0x1ffe0 max_arch_pfn = 0x400000000
+        [    0.000000] x86/PAT: Configuration [0-7]: WB  WC  UC- UC  WB  WP  UC- WT
+        [    0.000000] found SMP MP-table at [mem 0x000f6620-0x000f662f] mapped at [        (ptrval)]
+        [    0.000000] Scanning 1 areas for low memory corruption
+        [    0.000000] RAMDISK: [mem 0x1cd7d000-0x1ffdffff]
+        [    0.000000] ACPI: Early table checksum verification disabled
+        [    0.000000] ACPI: RSDP 0x00000000000F63F0 000014 (v00 BOCHS )
+        [    0.000000] ACPI: RSDT 0x000000001FFE1737 000034 (v01 BOCHS  BXPCRSDT 00000001 BXPC 00000001)
+        [    0.000000] ACPI: FACP 0x000000001FFE0C14 000074 (v01 BOCHS  BXPCFACP 00000001 BXPC 00000001)
+        [    0.000000] ACPI: DSDT 0x000000001FFE0040 000BD4 (v01 BOCHS  BXPCDSDT 00000001 BXPC 00000001)
+        [    0.000000] ACPI: FACS 0x000000001FFE0000 000040
+        [    0.000000] ACPI: SSDT 0x000000001FFE0C88 0009F7 (v01 BOCHS  BXPCSSDT 00000001 BXPC 00000001)
+        [    0.000000] ACPI: APIC 0x000000001FFE167F 000080 (v01 BOCHS  BXPCAPIC 00000001 BXPC 00000001)
+        [    0.000000] ACPI: HPET 0x000000001FFE16FF 000038 (v01 BOCHS  BXPCHPET 00000001 BXPC 00000001)
+        [    0.000000] No NUMA configuration found
+        [    0.000000] Faking a node at [mem 0x0000000000000000-0x000000001ffdffff]
+        [    0.000000] NODE_DATA(0) allocated [mem 0x1cd79000-0x1cd7cfff]
+        [    0.000000] tsc: Fast TSC calibration using PIT
+        [    0.000000] Zone ranges:
+        [    0.000000]   DMA      [mem 0x0000000000001000-0x0000000000ffffff]
+        [    0.000000]   DMA32    [mem 0x0000000001000000-0x000000001ffdffff]
+        [    0.000000]   Normal   empty
+        [    0.000000] Movable zone start for each node
+        [    0.000000] Early memory node ranges
+        [    0.000000]   node   0: [mem 0x0000000000001000-0x000000000009efff]
+        [    0.000000]   node   0: [mem 0x0000000000100000-0x000000001ffdffff]
+        [    0.000000] Initmem setup node 0 [mem 0x0000000000001000-0x000000001ffdffff]
+        [    0.000000] Reserved but unavailable: 98 pages
+        [    0.000000] ACPI: PM-Timer IO Port: 0x608
+        [    0.000000] ACPI: LAPIC_NMI (acpi_id[0xff] dfl dfl lint[0x1])
+        [    0.000000] IOAPIC[0]: apic_id 0, version 17, address 0xfec00000, GSI 0-23
+        [    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 0 global_irq 2 dfl dfl)
+        [    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 5 global_irq 5 high level)
+        [    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 9 global_irq 9 high level)
+        [    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 10 global_irq 10 high level)
+        [    0.000000] ACPI: INT_SRC_OVR (bus 0 bus_irq 11 global_irq 11 high level)
+        [    0.000000] Using ACPI (MADT) for SMP configuration information
+        [    0.000000] ACPI: HPET id: 0x8086a201 base: 0xfed00000
+        [    0.000000] smpboot: Allowing 2 CPUs, 0 hotplug CPUs
+        [    0.000000] PM: Registered nosave memory: [mem 0x00000000-0x00000fff]
+        [    0.000000] PM: Registered nosave memory: [mem 0x0009f000-0x0009ffff]
+        [    0.000000] PM: Registered nosave memory: [mem 0x000a0000-0x000effff]
+        [    0.000000] PM: Registered nosave memory: [mem 0x000f0000-0x000fffff]
+        [    0.000000] e820: [mem 0x20000000-0xfffbffff] available for PCI devices
+        [    0.000000] clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 1910969940391419 ns
+        [    0.000000] random: get_random_bytes called from start_kernel+0x8b/0x4c7 with crng_init=0
+        [    0.000000] setup_percpu: NR_CPUS:64 nr_cpumask_bits:64 nr_cpu_ids:2 nr_node_ids:1
+        [    0.000000] percpu: Embedded 43 pages/cpu @        (ptrval) s137496 r8192 d30440 u1048576
+        [    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 128873
+        [    0.000000] Policy zone: DMA32
+        [    0.000000] Kernel command line: console=ttyS0
+        [    0.000000] Memory: 437808K/523768K available (12300K kernel code, 1294K rwdata, 3104K rodata, 1232K init, 620K bss, 85960K reserved, 0K cma-reserved)
+        [    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+        [    0.000000] Hierarchical RCU implementation.
+        [    0.000000] 	RCU event tracing is enabled.
+        [    0.000000] 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=2.
+        [    0.000000] RCU: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=2
+        [    0.000000] NR_IRQS: 4352, nr_irqs: 440, preallocated irqs: 16
+        [    0.000000] Console: colour VGA+ 80x25
+        [    0.000000] console [ttyS0] enabled
+        [    0.000000] ACPI: Core revision 20180313
+        [    0.000000] clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604467 ns
+        [    0.000000] APIC: Switch to symmetric I/O mode setup
+        [    0.007000] ..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+        [    0.012000] tsc: Fast TSC calibration using PIT
+        [    0.013000] tsc: Detected 2394.509 MHz processor
+        [    0.015124] tsc: Marking TSC unstable due to TSCs unsynchronized
+        [    0.015487] Calibrating delay loop (skipped), value calculated using timer frequency.. 4789.01 BogoMIPS (lpj=2394509)
+        [    0.016097] pid_max: default: 32768 minimum: 301
+        [    0.017045] Security Framework initialized
+        [    0.017344] SELinux:  Initializing.
+        [    0.019168] Dentry cache hash table entries: 65536 (order: 7, 524288 bytes)
+        [    0.019735] Inode-cache hash table entries: 32768 (order: 6, 262144 bytes)
+        [    0.020184] Mount-cache hash table entries: 1024 (order: 1, 8192 bytes)
+        [    0.020454] Mountpoint-cache hash table entries: 1024 (order: 1, 8192 bytes)
+        [    0.034716] mce: CPU supports 10 MCE banks
+        [    0.035942] Last level iTLB entries: 4KB 0, 2MB 0, 4MB 0
+        [    0.036262] Last level dTLB entries: 4KB 0, 2MB 0, 4MB 0, 1GB 0
+        [    0.036582] Spectre V2 : Spectre mitigation: LFENCE not serializing, switching to generic retpoline
+        [    0.037000] Spectre V2 : Mitigation: Full generic retpoline
+        [    0.037284] Spectre V2 : Spectre v2 mitigation: Filling RSB on context switch
+        [    0.037623] Speculative Store Bypass: Vulnerable
+        [    0.041258] Freeing SMP alternatives memory: 36K
+        [    0.057000] smpboot: CPU0: AMD QEMU Virtual CPU version 2.5+ (family: 0x6, model: 0x6, stepping: 0x3)
+        [    0.062281] Performance Events: PMU not available due to virtualization, using software events only.
+        [    0.065351] Hierarchical SRCU implementation.
+        [    0.070506] Huh? What family is it: 0x6?!
+        [    0.072572] smp: Bringing up secondary CPUs ...
+        [    0.075697] x86: Booting SMP configuration:
+        [    0.076050] .... node  #0, CPUs:      #1
+        [    0.155564] smp: Brought up 1 node, 2 CPUs
+        [    0.156072] smpboot: Max logical packages: 2
+        [    0.156325] smpboot: Total of 2 processors activated (14859.34 BogoMIPS)
+        [    0.165500] BUG: unable to handle kernel NULL pointer dereference at 0000000000000288
+        [    0.165500] PGD 0 P4D 0
+        [    0.165500] Oops: 0000 [#1] SMP NOPTI
+        [    0.165500] Modules linked in:
+        [    0.165500] CPU: 1 PID: 15 Comm: ksoftirqd/1 Not tainted 4.17.2 #514
+        [    0.165500] Hardware name: QEMU Standard PC (i440FX + PIIX, 1996), BIOS Ubuntu-1.8.2-1ubuntu1 04/01/2014
+        [    0.165500] RIP: 0010:pick_next_task_smart+0x472/0x6a0
+        [    0.165500] RSP: 0018:ffffa6b50014be20 EFLAGS: 00000086
+        [    0.165500] RAX: 0000000000000000 RBX: ffff89929cb20740 RCX: 0000000000000000
+        [    0.165500] RDX: ffff89929cb208c0 RSI: 0000000000000000 RDI: ffff89929cb207c0
+        [    0.165500] RBP: ffff89929cb207c0 R08: 0000000000000000 R09: ffff89929cb208c0
+        [    0.165500] R10: 0000000000000000 R11: 0000000000000000 R12: ffff89929b9bd100
+        [    0.165500] R13: ffffa6b50014be90 R14: 0000000000000000 R15: ffff89929cb20740
+        [    0.165500] FS:  0000000000000000(0000) GS:ffff89929cb00000(0000) knlGS:0000000000000000
+        [    0.165500] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+        [    0.165500] CR2: 0000000000000288 CR3: 0000000010a0a000 CR4: 00000000000006e0
+        [    0.165500] Call Trace:
+        [    0.165500]  __schedule+0x100/0x820
+        [    0.165500]  schedule+0x2d/0x80
+        [    0.165500]  smpboot_thread_fn+0xbc/0x160
+        [    0.165500]  kthread+0xf3/0x130
+        [    0.165500]  ? sort_range+0x20/0x20
+        [    0.165500]  ? kthread_destroy_worker+0x40/0x40
+        [    0.165500]  ret_from_fork+0x35/0x40
+        [    0.165500] Code: 93 a0 00 00 00 49 89 87 a0 0a 00 00 66 66 66 66 90 48 83 83 c0 01 00 00 01 48 89 d8 e9 25 fd ff ff 31 f6 48 89 ef e8 8e 7c ff ff <48> 8b a8 88 02 00 00 48 85 ed 0f 84 b5 00 00 00 48 8b b5 10 01
+        [    0.165500] RIP: pick_next_task_smart+0x472/0x6a0 RSP: ffffa6b50014be20
+        [    0.165500] CR2: 0000000000000288
+        [    0.165500] ---[ end trace f0155efabb822db8 ]---
+        QEMU: Terminated

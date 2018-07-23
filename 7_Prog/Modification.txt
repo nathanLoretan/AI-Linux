@@ -108,6 +108,15 @@ smart.c                added            update_balance_queue
 init/main.c            added            init_sb_synch_point()
 include/linux/sched/ai.h added          init_sb_synch_point()
 include/sched.h         added           attributes
+smart.c                modified         pick_next_task_smart
+                                        enqueue_entity
+                                        __enqueue_entity
+                                        dequeue_entity
+                                        __dequeue_entity
+                                        detach_task_cfs_rq
+                                        attach_task_cfs_rq
+                                        remove state_used
+kthread.c                  modified         kthread_create_on_node
 
 NOT USEFUL: // NOTE: USELESS
 -----------
