@@ -1,0 +1,375 @@
+Start program on boot:
+**********************
+https://ask.fedoraproject.org/en/question/51395/how-to-start-a-program-automatic/
+https://stackoverflow.com/questions/12973777/how-to-run-a-shell-script-at-startup
+https://unix.stackexchange.com/questions/56957/how-to-start-an-application-automatically-on-boot
+https://raspberrypi.stackexchange.com/questions/8734/execute-script-on-start-up
+
+cp start_my_app /etc/init.d/start_my_app
+chmod +x /etc/init.d/start_my_app
+sudo update-rc.d measurement.sh defaults
+
+start cmd with higher priority:
+*******************************
+sudo nice -n -20 su -c command_to_run user_to_run_as
+
+Filename:
+*********
+
+/proc/schedai_debug
+/proc/schedsb_debug
+
+/mnt/SynchCounter.txt
+/mnt/loadweight.txt
+/mnt/blockweight.txt
+/mnt/lockweight.txt
+/mnt/sleepweight.txt
+/mnt/SynchCounter_sb.txt
+/mnt/runtimeweight_sb.txt
+/mnt/blockweight_sb.txt
+/mnt/completionweight_sb.txt
+/mnt/schedweight_sb.txt
+
+synchcounter
+loadweight
+blockweight
+lockweight
+sleepweight
+runtimeweight
+completionweight
+schedweight
+
+# This script takes 4 argument:
+#
+#     1. Proc filename from which to get the value
+#         - schedai_debug
+#         - schedsb_debug
+#     2. The filename where the data are saved for then plotting
+#         - SynchCounter.txt
+#         - loadweight.txt
+#         - blockweight.txt
+#         - lockweight.txt
+#         - sleepweight.txt
+#         - SynchCounter_sb.txt
+#         - deltaexecweight_sb.txt
+#         - blockweight_sb.txt
+#         - completionweight_sb.txt
+#         - schedweight_sb.txt
+#     3. The type of data considered
+#         - SynchCounter
+#         - loadweight
+#         - blockweight
+#         - lockweight
+#         - sleepweight
+#         - deltaexecweight
+#         - completionweight
+#         - schedweight
+#     4. Interval when to get new values
+
+================================================================================
+2^10 = 1024     -> 0.000'976'562
+2^14 = 16384    -> 0.000'061'035
+2^17 = 131072   -> 0.000'007'629
+
+test 1: no learning, look if it works
+test 2: measurement without doing anything
+test 3: measurement CPU bound
+test 4: measurement IO bound
+test 5: measurement disk operation
+test 6: CPU + IO
+test 7: disk + CPU + IO
+
+- start stress with different process priority
+
+test 1: -> OK
+*******
+        SFS[*]
+                Q               = 10
+                ALPHA           = 0 | 0.1
+                GAMMA           = 0 | 0.1
+                WEIGHT PRIO     = 1
+                WEIGHT BLOCK    = 0
+                WEIGHT SLEEP    = 0
+                WEIGHT LOCK     = 0
+        SB[ ]
+
+test 2:
+*******
+        SFS[*]
+                Q               = 10
+                ALPHA           = 0.1
+                GAMMA           = 0.1
+                WEIGHT PRIO     = 1
+                WEIGHT BLOCK    = 0
+                WEIGHT SLEEP    = 0
+                WEIGHT LOCK     = 0
+        SB[*]
+                ALPHA           = 0.1
+                GAMMA           = 0.1
+                WEIGHT DEXEC    = -1
+                WEIGHT SCHED    = -1
+                WEIGHT BLOCK    = -1
+                WEIGHT COMP     = -1
+
+
+
+Benchmark:
+        - Nmon, sudo apt-get install nmon
+
+stress:
+*******
+stress [option]:
+-c n: n workers spinning on sqrt()
+-i n: n worker spinning on I/O sync(), sync() ensures that everything in memory is written to disk
+-m n: n worker spinning on malloc()/free()
+--vm-bytes B: Malloc B per vm worker for -m n
+--vm-stride B: touch a byte every B bytes (default is 4096)
+--vm-hang N: sleep N secs before free (default none, 0 is inf)
+--vm-keep: redirty memory instead of freeing and reallocating
+-d n: n worker spinning on write()/unlink()
+--hdd-bytes B: write B bytes per hdd worker
+-t x: timeout after x second
+-v  : verbose
+
+stress-ng:
+**********
+stress-ng [option]:
+XX--disk n: n owkrers continually writing/reading/removing temporary files
+--cpu n: start N workers exercising the CPU by sequentially working through all the different CPU stress methods
+--cpu-method: define a specific method to stress the cpu
+--io n: start N workers continuously calling sync(2)
+--vm n: start N workers continuously calling mmap(2)/munmap(2)
+--hdd n: hdd stress testing
+XXq--dir n: n process that crate/remove directories
+XX--nice n: fork child process
+--matrix n: start N workers that perform various matrix operations
+XX--mq n: start N sender and receiver processes that continually send and receive messages
+--malloc n: start n workers continuously calling malloc(3), calloc(3), realloc(3) and free(3)
+--sem N           start N workers doing semaphore operations
+-s N, --switch N        start N workers doing rapid context switches
+-T N, --timer N         start N workers producing timer events
+
+--chmod n:
+--timeout t:
+--metrics-brief:
+--sem
+
+--cpu: p                                                -> +, +p
+--io: l / s                                             -> +
+--vm: bof
+--hdd: l
+--sem: bof
+--switch: bl                                            -> +
+--timer: bof
+--poll: bof
+--fork: ls
+--fallocate: ls -> good for s because disk sleep        -> +, +s
+--dentry: bls                                           -> +, +b
+--cache: l
+--affinity: l
+
+p  prio
+l  lock
+b  block
+s  sleep
+c  comp
+sc sched
+
+TODO:
+        - check sign of w = w + dw                                      -> OK
+        - check display of negatif number                               -> OK
+        - Utilization target negatif, weight negatif ?                  -> OK
+                -> error in the calculation of the dQ/dw
+        - Number of locks acquired                                      -> OK
+        - why modifying Q modify behaviour?                             -> OK
+                -> because the value of load are scale using 10,
+                -> if bigger, need new value for load
+        - removed scaling factor and use a small initial wieght?
+        - test: test.c -1*-1 1*1 -1*1 1/1 -1/1 -1/-1
+
+        - priority:
+                - is load bigger if lower priority ?
+                - how the value in the table is selected if priority -20 ?
+
+
+
+                const int sched_prio_to_weight_ai[40] = {
+                 /* -20 */     88761,     71755,     56483,     46273,     36291,
+                 /* -15 */     29154,     23254,     18705,     14949,     11916,
+                 /* -10 */      9548,      7620,      6100,      4904,      3906,
+                 /*  -5 */      3121,      2501,      1991,      1586,      1277,
+                 /*   0 */      1024,       820,       655,       526,       423,
+                 /*   5 */       335,       272,       215,       172,       137,
+                 /*  10 */       110,        87,        70,        56,        45,
+                 /*  15 */        36,        29,        23,        18,        15,
+                };
+
+        - block after 100 synchronization ?
+                -> problem with convergence
+
+        - scale:
+                reward
+                prio
+                state
+                balance
+
+================================================================================
+
+SFS[*]
+        Q               = 10
+        ALPHA           = 0.1
+        GAMMA           = 0.9
+        WEIGHT PRIO     = 1
+        WEIGHT BLOCK    = 0 or 1 doesn't matter
+        WEIGHT SLEEP    = 0 or 1 doesn't matter
+        WEIGHT LOCK     = 0 or 1 doesn't matter
+
+stress -c 10&
+
+#define REDUCT_Q		0//10
+#define REDUCT_STATE		10
+#define REDUCT_BALANCE		10
+#define REDUCT_PRIO		10
+#define REDUCT_REWARDS		20
+se->aistats.prio = scale_up(sched_prio_to_weight_ai[prio]) / 10
+se->aistats.prio = scale_up(sched_prio_to_weight_ai[prio]) / 100 -> nicer
+
+-----------------------------------
+
+SFS[*]
+        Q               = 10
+        ALPHA           = 0
+        GAMMA           = 0
+        WEIGHT PRIO     = 1
+        WEIGHT BLOCK    = 0
+        WEIGHT SLEEP    = 0
+        WEIGHT LOCK     = 0
+SB[*]
+        ALPHA           = 0.1
+        GAMMA           = 0.1
+        WEIGHT DEXEC    = -1
+        WEIGHT SCHED    = -1
+        WEIGHT BLOCK    = -1
+        WEIGHT COMP     = -1
+
+-smp 2
+
+#define REDUCT_Q		0//10
+#define REDUCT_STATE		10
+#define REDUCT_PRIO		10
+#define REDUCT_REWARDS		20
+
+#define REDUCT_BALANCE		10 -> 0 nicer -> may be not
+#define REDUCT_AVG_SCHED 	10
+#define REDUCT_AVG_DEXEC	10
+
+se->aistats.prio = scale_up(sched_prio_to_weight_ai[prio]) / 10
+se->aistats.prio = scale_up(sched_prio_to_weight_ai[prio]) / 100 -> nicer
+
+================================================================================
+https://www.kernel.org/doc/Documentation/RCU/stallwarn.txt
+
+
+root@nathan:~# [   31.707005] INFO: rcu_sched detected stalls on CPUs/tasks:
+[   31.707621] 	(detected by 0, t=21002 jiffies, g=178, c=177, q=2046)
+[   31.708261] All QSes seen, last rcu_sched kthread activity 21002 (4294699003-4294678001), jiffies_till_next_fqs=3, root ->qsmask 0x0
+[   31.709462] stress          R  running task    15368  1860   1851 0x00000000
+[   31.710203] Call Trace:
+[   31.710523]  <IRQ>
+[   31.710792]  sched_show_task+0x109/0x140
+[   31.711292]  rcu_check_callbacks+0x85f/0x870
+[   31.711827]  ? tick_sched_do_timer+0x50/0x50
+[   31.712360]  update_process_times+0x23/0x50
+[   31.712880]  tick_sched_handle+0x2f/0x40
+[   31.713370]  tick_sched_timer+0x32/0x70
+[   31.713848]  __hrtimer_run_queues+0x103/0x280
+[   31.714389]  hrtimer_interrupt+0xe0/0x240
+[   31.714894]  smp_apic_timer_interrupt+0x5d/0x120
+[   31.715468]  apic_timer_interrupt+0xf/0x20
+[   31.715956]  </IRQ>
+[   31.716179] RIP: 0033:0x7ff250ae5850
+[   31.716548] RSP: 002b:00007ffe7b8ebb88 EFLAGS: 00000246 ORIG_RAX: ffffffffffffff13
+[   31.717314] RAX: 0000000061af7d11 RBX: 0000000000000008 RCX: 00007ff250e52120
+[   31.718036] RDX: 00007ff250e520a4 RSI: 00007ffe7b8ebb9c RDI: 00007ff250e525c0
+[   31.718797] RBP: 0000000000008ca0 R08: 00007ff250e52110 R09: 00007ff250e52120
+[   31.719598] R10: 00007ffe7b8eb980 R11: 00007ff250ae5ae0 R12: 0000000000000000
+[   31.720454] R13: 0000000000000000 R14: 000000000000000c R15: 0000000000000000
+[   31.721313] rcu_sched kthread starved for 21002 jiffies! g178 c177 f0x2 RCU_GP_WAIT_FQS(3) ->state=0x0 ->cpu=0
+[   31.722508] RCU grace-period kthread stack dump:
+[   31.723025] rcu_sched       R  running task    15304     9      2 0x80000000
+[   31.723746] Call Trace:
+[   31.724006]  ? __schedule+0x237/0x830
+[   31.724387]  schedule+0x23/0x80
+[   31.724713]  schedule_timeout+0x177/0x370
+[   31.725132]  ? __next_timer_interrupt+0xc0/0xc0
+[   31.725599]  rcu_gp_kthread+0x58e/0xd10
+[   31.725996]  ? __wake_up_common+0x6f/0x120
+[   31.726420]  ? call_rcu_sched+0x10/0x10
+[   31.726824]  kthread+0x10e/0x130
+[   31.727162]  ? kthread_create_worker_on_cpu+0x70/0x70
+[   31.727682]  ret_from_fork+0x35/0x40
+QEMU: Terminated
+
+
+
+================================================================================
+
+http://www.brendangregg.com/linuxperf.html
+
+Perf:
+-----
+perf list
+       |_ list possible event
+
+perf stat -e cycles                 dd if=/dev/zero of=/dev/null count=10000000
+           |   |
+           | event's name
+          event
+
+          -r   5
+           |   |
+           | 5 times
+          repeat
+
+         -x, date
+          |
+make the output machine readable
+
+event:
+        - cache-misses
+        - cpu-cycles or cycles
+        - page faults
+        - CPU migrations
+        - context-switches or cs
+
+lkp-tests:
+----------
+https://01.org/sites/default/files/documentation/lkp-tests.pdf
+https://github.com/fengguang/lkp-tests
+
+LinSched:
+---------
+https://www.ibm.com/developerworks/library/l-linux-scheduler-simulator/index.html
+
+
+
+
+
+Simulation:
+-----------
+lkp-tests: Benchmark
+LinSched: Linux scheduler simulator
+LTTng: Tracing
+Phoronix Test Suite
+
+
+Cache ratio:
+-----------
+PAPI NOTE: For user space
+
+Page cache ratio:
+------------------
+cachestat: show Linux page cache hit/miss statistics NOTE: command line
+
+--------------------------------------------------------------------------------
+TAU

@@ -97,7 +97,9 @@ wait.h                 modified         __add_wait_queue()
                                         __add_wait_queue_entry_tail_exclusive()
 swait.c                modified         __prepare_to_swait
 timer.c                modified         schedule_timeout
--------> balance
+set_load_weight        added            set_prio_weight_ai                      core.c
+reweight_task          added            set_prio_weight_ai                      smart.c
+-----------------------> balance
 smart.c                modified         load_balance
                                         detach_tasks
 smart.c                added            update_balance_queue
