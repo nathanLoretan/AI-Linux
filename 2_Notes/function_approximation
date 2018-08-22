@@ -1,8 +1,0 @@
-policy search
-value function approximation (VFA)
-actor–critic methods
-
-learning control -> estimate optimal policy or optimal value function
-learning prediction -> solve the policy evaluation
-
-pi(ajx) to denote the probability of selecting action a in state x by pi.
