@@ -1,4 +1,4 @@
-# MSc_Project
+# AI-Linux - University of Glasgow, MSc Project
 
 AI-Linux is a research project that tries to implement an Artificial Intelligence within the kernel of an operating system, In this case, the Linux kernel. 
 
